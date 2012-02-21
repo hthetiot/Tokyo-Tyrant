@@ -1,0 +1,14 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+datarootdir = @datarootdir@
+bindir=@bindir@
+libdir=@libdir@
+libexecdir=@libexecdir@
+includedir=@includedir@
+datadir=@datadir@
+
+Name: Tokyo Tyrant
+Description: network interface of Tokyo Cabinet
+Version: @PACKAGE_VERSION@
+Libs: -L${libdir} -ltokyotyrant @LIBS@
+Cflags: -I${includedir}

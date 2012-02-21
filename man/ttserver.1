@@ -1,0 +1,84 @@
+.TH "TTSERVER" 1 "2010-08-05" "Man Page" "Tokyo Tyrant"
+
+.SH NAME
+ttserver \- the server of Tokyo Tyrant
+
+.SH DESCRIPTION
+.PP
+The command `\fBttserver\fR' runs the server managing a database instance.  Because the database is treated by the abstract API of Tokyo Cabinet, you can choose the scheme on start\-up of the server.  Supported schema are on\-memory hash database, on\-memory tree database, hash database, and B+ tree database.  This command is used in the following format.  `\fIdbname\fR' specifies the database name.  If it is omitted, on\-memory hash database is specified.
+.PP
+.RS
+.br
+\fBttserver \fR[\fB\-host \fIname\fB\fR]\fB \fR[\fB\-port \fInum\fB\fR]\fB \fR[\fB\-thnum \fInum\fB\fR]\fB \fR[\fB\-tout \fInum\fB\fR]\fB \fR[\fB\-dmn\fR]\fB \fR[\fB\-pid \fIpath\fB\fR]\fB \fR[\fB\-kl\fR]\fB \fR[\fB\-log \fIpath\fB\fR]\fB \fR[\fB\-ld\fR|\fB\-le\fR]\fB \fR[\fB\-ulog \fIpath\fB\fR]\fB \fR[\fB\-ulim \fInum\fB\fR]\fB \fR[\fB\-uas\fR]\fB \fR[\fB\-sid \fInum\fB\fR]\fB \fR[\fB\-mhost \fIname\fB\fR]\fB \fR[\fB\-mport \fInum\fB\fR]\fB \fR[\fB\-rts \fIpath\fB\fR]\fB \fR[\fB\-rcc\fR]\fB \fR[\fB\-skel \fIname\fB\fR]\fB \fR[\fB\-mul \fInum\fB\fR]\fB \fR[\fB\-ext \fIpath\fB\fR]\fB \fR[\fB\-extpc \fIname\fB \fIperiod\fB\fR]\fB \fR[\fB\-mask \fIexpr\fB\fR]\fB \fR[\fB\-unmask \fIexpr\fB\fR]\fB \fR[\fB\fIdbname\fB\fR]\fB\fR
+.RE
+.PP
+Options feature the following.
+.PP
+.RS
+\fB\-host \fIname\fR\fR : specify the host name or the address of the server.  By default, every network address is bound.
+.br
+\fB\-port \fInum\fR\fR : specify the port number.  By default, it is 1978.
+.br
+\fB\-thnum \fInum\fR\fR : specify the number of worker threads.  By default, it is 8.
+.br
+\fB\-tout \fInum\fR\fR : specify the timeout of each session in seconds.  By default, no timeout is specified.
+.br
+\fB\-dmn\fR : work as a daemon process.
+.br
+\fB\-pid \fIpath\fR\fR : output the process ID into the file.
+.br
+\fB\-kl\fR : kill the existing process if the process ID file is detected.
+.br
+\fB\-log \fIpath\fR\fR : output log messages into the file.
+.br
+\fB\-ld\fR : log debug messages also.
+.br
+\fB\-le\fR : log error messages only.
+.br
+\fB\-ulog \fIpath\fR\fR : specify the update log directory.
+.br
+\fB\-ulim \fInum\fR\fR : specify the limit size of each update log file.
+.br
+\fB\-uas\fR : use asynchronous I/O for the update log.
+.br
+\fB\-sid \fInum\fR\fR : specify the server ID.
+.br
+\fB\-mhost \fIname\fR\fR : specify the host name of the replication master server.
+.br
+\fB\-mport \fInum\fR\fR : specify the port number of the replication master server.
+.br
+\fB\-rts \fIpath\fR\fR : specify the replication time stamp file.
+.br
+\fB\-rcc\fR : check consistency of replication.
+.br
+\fB\-skel \fIname\fR\fR : specify the name of the skeleton database library.
+.br
+\fB\-mul \fInum\fR\fR : specify the division number of the multiple database mechanism.
+.br
+\fB\-ext \fIpath\fR\fR : specify the script language extension file.
+.br
+\fB\-extpc \fIname\fR \fIperiod\fR\fR : specify the function name and the calling period of a periodic command.
+.br
+\fB\-mask \fIexpr\fR\fR : specify the names of forbidden commands.
+.br
+\fB\-unmask \fIexpr\fR\fR : specify the names of allowed commands.
+.br
+.RE
+.PP
+To terminate the server normally, send SIGINT or SIGTERM to the process.  It is okay to press Ctrl\-C on the controlling terminal.  To restart the server, send SIGHUP to the process.  If the port number is not more than 0, UNIX domain socket is used and the path of the socket file is specified by the host parameter.  This command returns 0 on success, another on failure.
+.PP
+The naming convention of the database is specified by the abstract API of Tokyo Cabinet.  If the name is "*", the database will be an on\-memory hash database.  If it is "+", the database will be an on\-memory tree database.  If its suffix is ".tch", the database will be a hash database.  If its suffix is ".tcb", the database will be a B+ tree database.  If its suffix is ".tcf", the database will be a fixed\-length database.  If its suffix is ".tct", the database will be a table database.  Otherwise, this function fails.  Tuning parameters can trail the name, separated by "#".  Each parameter is composed of the name and the value, separated by "=".  On\-memory hash database supports "bnum", "capnum", and "capsiz".  On\-memory tree database supports "capnum" and "capsiz".  Hash database supports "mode", "bnum", "apow", "fpow", "opts", "rcnum", and "xmsiz".  B+ tree database supports "mode", "lmemb", "nmemb", "bnum", "apow", "fpow", "opts", "lcnum", "ncnum", and "xmsiz".  Fixed\-length database supports "mode", "width", and "limsiz".  Table database supports "mode", "bnum", "apow", "fpow", "opts", "rcnum", "lcnum", "ncnum", "xmsiz", and "idx".  The tuning parameter "capnum" specifies the capacity number of records.  "capsiz" specifies the capacity size of using memory.  Records spilled the capacity are removed by the storing order.  "mode" can contain "w" of writer, "r" of reader, "c" of creating, "t" of truncating, "e" of no locking, and "f" of non\-blocking lock.  The default mode is relevant to "wc".  "opts" can contains "l" of large option, "d" of Deflate option, "b" of BZIP2 option, and "t" of TCBS option.  "idx" specifies the column name of an index and its type separated by ":".  For example, "casket.tch#bnum=1000000#opts=ld" means that the name of the database file is "casket.tch", and the bucket number is 1000000, and the options are large and Deflate.
+.PP
+The command mask expression is a list of command names separated by ",".  For example, "out,vanish,copy" means a set of "out", "vanish", and "copy".  Commands of the memcached compatible protocol and the HTTP compatible protocol are also forbidden or allowed, related by the mask of each original command.  Moreover, there are meta expressions.  "all" means all commands.  "allorg" means all commands of the original binary protocol.  "allmc" means all commands of the memcached compatible protocol.  "allhttp" means all commands of the HTTP compatible protocol.  "allread" is the abbreviation of `get', `mget', `vsiz', `iterinit', `iternext', `fwmkeys', `rnum', `size', and `stat'.  "allwrite" is the abbreviation of `put', `putkeep', `putcat', `putshl', `putnr', `out', `addint', `adddouble', `vanish', and `misc'.  "allmanage" is the abbreviation of `sync', `optimize', `copy', `restore', and `setmst'.  "repl" means replication as master.  "slave" means replication as slave.
+
+.SH SEE ALSO
+.PP
+.BR ttultest (1),
+.BR ttulmgr (1),
+.BR tcrtest (1),
+.BR tcrmttest (1),
+.BR tcrmgr (1),
+.BR ttutil (3),
+.BR ttulog (3),
+.BR tcrdb (3),
+.BR ttservctl (8)

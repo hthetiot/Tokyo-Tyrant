@@ -1,0 +1,38 @@
+================================================================
+ Tokyo Tyrant: network interface of Tokyo Cabinet
+ Copyright (C) 2006-2009 FAL Labs
+================================================================
+
+
+Please read the following documents with a WWW browser.
+How to install Tokyo Cabinet is explained in the specification.
+
+  README         - this file
+  COPYING        - license
+  ChangeLog      - history of enhancement
+  THANKS         - list of contributors
+  doc/index.html - index of documents
+
+
+Contents of the directory tree is below.
+
+  ./             - sources of Tokyo Tyrant
+  ./doc/         - manuals and specifications
+  ./man/         - manuals for nroff
+  ./ext/         - sample script for the script extension
+  ./example/     - sample code of tutorial
+  ./lab/         - for test and experiment
+
+
+Tokyo Tyrant is released under the terms of the GNU Lesser General
+Public License.  See the file `COPYING' for details.
+
+Tokyo Tyrant was written by FAL Labs.  You can contact the author
+by e-mail to `info@fallabs.com'.
+
+
+Thanks.
+
+
+
+== END OF FILE ==

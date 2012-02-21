@@ -1,0 +1,55 @@
+.TH "TCRMTTEST" 1 "2010-08-05" "Man Page" "Tokyo Tyrant"
+
+.SH NAME
+tcrmttest \- test cases of the remote database API
+
+.SH DESCRIPTION
+.PP
+The command `\fBtcrmttest\fR' is a utility for facility test under multi\-thread situation.  This command is used in the following format.  `\fIhost\fR' specifies the host name of the server.  `\fIrnum\fR' specifies the number of iterations.
+.PP
+.RS
+.br
+\fBtcrmttest write \fR[\fB\-port \fInum\fB\fR]\fB \fR[\fB\-tnum \fInum\fB\fR]\fB \fR[\fB\-nr\fR]\fB \fR[\fB\-rnd\fR]\fB \fR[\fB\-ext \fIname\fB\fR]\fB \fIhost\fB \fIrnum\fB\fR
+.RS
+Store records with keys of 8 bytes.  They change as `00000001', `00000002'...
+.RE
+.br
+\fBtcrmttest read \fR[\fB\-port \fInum\fB\fR]\fB \fR[\fB\-tnum \fInum\fB\fR]\fB \fR[\fB\-mul \fInum\fB\fR]\fB \fIhost\fB\fR
+.RS
+Retrieve all records of the database above.
+.RE
+.br
+\fBtcrmttest remove \fR[\fB\-port \fInum\fB\fR]\fB \fR[\fB\-tnum \fInum\fB\fR]\fB \fIhost\fB\fR
+.RS
+Remove all records of the database above.
+.RE
+.RE
+.PP
+Options feature the following.
+.PP
+.RS
+\fB\-port \fInum\fR\fR : specify the port number.
+.br
+\fB\-tnum \fInum\fR\fR : specify the number of running threads.
+.br
+\fB\-nr\fR : use the function `tcrdbputnr' instead of `tcrdbput'.
+.br
+\fB\-rnd\fR : select keys at random.
+.br
+\fB\-ext \fIname\fR\fR : call a script language extension function.
+.br
+\fB\-mul \fInum\fR\fR : specify the number of records for the mget command.
+.br
+.RE
+.PP
+If the port number is not more than 0, UNIX domain socket is used and the path of the socket file is specified by the host parameter.  This command returns 0 on success, another on failure.
+
+.SH SEE ALSO
+.PP
+.BR ttserver (1),
+.BR ttultest (1),
+.BR ttulmgr (1),
+.BR tcrtest (1),
+.BR tcrmgr (1),
+.BR ttutil (3),
+.BR tcrdb (3)

@@ -1,0 +1,38 @@
+#! /bin/sh
+
+export PATH="$PATH:/usr/local/bin:.:.."
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib:.:.."
+
+rm -rf 1978-ulog
+mkdir -p 1978-ulog
+rm -f 1978.*
+
+ttserver -port 1978 -dmn \
+  -pid "$PWD/1978.pid" \
+  -log "$PWD/1978.log" \
+  -ulog "$PWD/1978-ulog" \
+  -sid 1978 \
+  -mhost localhost \
+  -mport 1979 \
+  -rts "$PWD/1978.rts" \
+  "$PWD/1978.tch"
+
+rm -rf 1979-ulog
+mkdir -p 1979-ulog
+rm -f 1979.*
+
+rm -rf 1979-ulog
+mkdir -p 1979-ulog
+rm -f 1979.*
+
+ttserver -port 1979 -dmn \
+  -pid "$PWD/1979.pid" \
+  -log "$PWD/1979.log" \
+  -ulog "$PWD/1979-ulog" \
+  -sid 1979 \
+  -mhost localhost \
+  -mport 1978 \
+  -rts "$PWD/1979.rts" \
+  "$PWD/1979.tch"
+
+exit 0

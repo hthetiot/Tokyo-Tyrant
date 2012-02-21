@@ -1,0 +1,300 @@
+# Source of configuration for Tokyo Tyrant
+
+
+
+#================================================================
+# Generic Settings
+#================================================================
+
+# Package name
+AC_INIT(tokyotyrant, 1.1.41)
+
+# Package information
+MYLIBVER=3
+MYLIBREV=24
+MYPROTVER="0.91"
+
+# Targets
+MYHEADERFILES="ttutil.h tculog.h tcrdb.h"
+MYLIBRARYFILES="libtokyotyrant.a"
+MYLIBOBJFILES="ttutil.o tculog.o tcrdb.o myconf.o"
+MYCOMMANDFILES="ttserver ttulmgr ttultest tcrtest tcrmttest tcrmgr"
+MYINITFILES="ttservctl"
+MYMAN1FILES="ttserver.1 ttulmgr.1 ttultest.1 tcrtest.1 tcrmttest.1 tcrmgr.1"
+MYMAN3FILES="ttutil.3 tculog.3 tcrdb.3"
+MYMAN8FILES="ttservctl.8"
+MYSCREXTFILES="ext"
+MYDOCUMENTFILES="COPYING ChangeLog THANKS doc tokyotyrant.idl"
+MYPCFILES="tokyotyrant.pc"
+
+# Building flags
+MYCFLAGS="-std=c99 -Wall -fPIC -fsigned-char -O2"
+MYCPPFLAGS="-I. -I\$(INCLUDEDIR) -I$HOME/include -I/usr/local/include"
+MYCPPFLAGS="$MYCPPFLAGS -DNDEBUG -D_GNU_SOURCE=1 -D_REENTRANT -D__EXTENSIONS__"
+MYLDFLAGS="-L. -L\$(LIBDIR) -L$HOME/lib -L/usr/local/lib"
+MYCMDLDFLAGS=""
+MYRUNPATH="\$(LIBDIR)"
+MYLDLIBPATHENV="LD_LIBRARY_PATH"
+MYPOSTCMD="true"
+
+# Building paths
+PATH="$PATH:$HOME/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
+PATH="$PATH:/opt/SUNWspro/bin:/usr/ccs/bin:/usr/xpg4/bin:/usr/xpg6/bin:/usr/ucb"
+CPATH="$HOME/include:/usr/local/include:$CPATH"
+LIBRARY_PATH="$HOME/lib:/usr/local/lib:$LIBRARY_PATH"
+LD_LIBRARY_PATH="$HOME/lib:/usr/local/lib:$LD_LIBRARY_PATH"
+PKG_CONFIG_PATH="$HOME/lib/pkgconfig:/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
+export PATH CPATH LIBRARY_PATH LD_LIBRARY_PATH PKG_CONFIG_PATH
+if type pkg-config > /dev/null 2>&1
+then
+  PATH="$PATH:`pkg-config --variable=bindir tokyocabinet`"
+  CPATH="$CPATH:`pkg-config --variable=includedir tokyocabinet`"
+  LIBRARY_PATH="$LIBRARY_PATH:`pkg-config --variable=libdir tokyocabinet`"
+  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:`pkg-config --variable=libdir tokyocabinet`"
+fi
+
+
+
+#================================================================
+# Options
+#================================================================
+
+
+# Internal variables
+enables=""
+
+# Debug mode
+AC_ARG_ENABLE(debug,
+  AC_HELP_STRING([--enable-debug], [build for debugging]))
+if test "$enable_debug" = "yes"
+then
+  MYCFLAGS="-std=c99 -Wall -fPIC -pedantic -fsigned-char -g -O0"
+  MYCPPFLAGS="$MYCPPFLAGS -UNDEBUG"
+  MYCMDLDFLAGS="$MYCMDLDFLAGS -static"
+  enables="$enables (debug)"
+fi
+
+# Developping mode
+AC_ARG_ENABLE(devel,
+  AC_HELP_STRING([--enable-devel], [build for development]))
+if test "$enable_devel" = "yes"
+then
+  MYCFLAGS="-std=c99 -Wall -fPIC -pedantic -fsigned-char -g -O2 -pipe"
+  MYCPPFLAGS="$MYCPPFLAGS -UNDEBUG"
+  enables="$enables (devel)"
+fi
+
+# Profiling mode
+AC_ARG_ENABLE(profile,
+  AC_HELP_STRING([--enable-profile], [build for profiling]))
+if test "$enable_profile" = "yes"
+then
+  MYCFLAGS="-std=c99 -Wall -fPIC -pedantic -fsigned-char -g -pg -O2 -pipe"
+  enables="$enables (profile)"
+fi
+
+# Static mode
+AC_ARG_ENABLE(static,
+  AC_HELP_STRING([--enable-static], [build by static linking]))
+if test "$enable_static" = "yes"
+then
+  MYCMDLDFLAGS="$MYCMDLDFLAGS -static"
+  enables="$enables (static)"
+fi
+
+# Disable shared object
+AC_ARG_ENABLE(shared,
+  AC_HELP_STRING([--disable-shared], [avoid to build shared libraries]))
+if test "$enable_shared" = "no"
+then
+  enables="$enables (no-shared)"
+fi
+
+# Enable Lua extension
+AC_ARG_ENABLE(lua,
+  AC_HELP_STRING([--enable-lua], [build with Lua extension]))
+if test "$enable_lua" = "yes"
+then
+  enables="$enables (lua)"
+  luaver=`lua -e 'v = string.gsub(_VERSION, ".* ", ""); print(v)'`
+  MYCPPFLAGS="$MYCPPFLAGS -I/usr/include/lua$luaver -I/usr/local/include/lua$luaver"
+  MYCPPFLAGS="$MYCPPFLAGS -I/usr/include/lua -I/usr/local/include/lua -D_MYLUA"
+  MYLDFLAGS="$MYLDFLAGS -L/usr/include/lua$luaver -L/usr/local/include/lua$luaver"
+  MYLDFLAGS="$MYLDFLAGS -L/usr/include/lua -L/usr/local/include/lua"
+  CPATH="$CPATH:/usr/include/lua$luaver:/usr/local/include/lua$luaver"
+  CPATH="$CPATH:/usr/include/lua:/usr/local/include/lua"
+  LIBRARY_PATH="$LIBRARY_PATH:/usr/lib/lua$luaver:/usr/local/lib/lua$luaver"
+  LIBRARY_PATH="$LIBRARY_PATH:/usr/lib/lua:/usr/local/lib/lua"
+  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/include/lua$luaver:/usr/local/include/lua$luaver"
+  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/include/lua:/usr/local/include/lua"
+fi
+
+# Specify the installation path of Tokyo Cabinet
+AC_ARG_WITH(tc,
+  AC_HELP_STRING([--with-tc=DIR], [search DIR/include and DIR/lib for Tokyo Cabinet]))
+if test -n "$with_tc"
+then
+  MYCPPFLAGS="$MYCPPFLAGS -I$with_tc/include"
+  MYLDFLAGS="$MYLDFLAGS -L$with_tc/lib"
+  MYRUNPATH="$MYRUNPATH:$with_tc/lib"
+  CPATH="$CPATH:$with_tc/include"
+  LIBRARY_PATH="$LIBRARY_PATH:$with_tc/lib"
+  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$with_tc/lib"
+fi
+
+# Specify the installation path of ZLIB
+AC_ARG_WITH(zlib,
+  AC_HELP_STRING([--with-zlib=DIR], [search DIR/include and DIR/lib for ZLIB]))
+if test -n "$with_zlib"
+then
+  MYCPPFLAGS="$MYCPPFLAGS -I$with_zlib/include"
+  MYLDFLAGS="$MYLDFLAGS -L$with_zlib/lib"
+  MYRUNPATH="$MYRUNPATH:$with_zlib/lib"
+  CPATH="$CPATH:$with_zlib/include"
+  LIBRARY_PATH="$LIBRARY_PATH:$with_zlib/lib"
+  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$with_zlib/lib"
+fi
+
+# Specify the installation path of BZIP2
+AC_ARG_WITH(bzip,
+  AC_HELP_STRING([--with-bzip=DIR], [search DIR/include and DIR/lib for BZIP2]))
+if test -n "$with_bzip"
+then
+  MYCPPFLAGS="$MYCPPFLAGS -I$with_bzip/include"
+  MYLDFLAGS="$MYLDFLAGS -L$with_bzip/lib"
+  MYRUNPATH="$MYRUNPATH:$with_bzip/lib"
+  CPATH="$CPATH:$with_bzip/include"
+  LIBRARY_PATH="$LIBRARY_PATH:$with_bzip/lib"
+  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$with_bzip/lib"
+fi
+
+# Specify the installation path of Lua
+AC_ARG_WITH(lua,
+  AC_HELP_STRING([--with-lua=DIR], [search DIR/include and DIR/lib for Lua]))
+if test -n "$with_lua"
+then
+  MYCPPFLAGS="$MYCPPFLAGS -I$with_lua/include"
+  MYLDFLAGS="$MYLDFLAGS -L$with_lua/lib"
+  MYRUNPATH="$MYRUNPATH:$with_lua/lib"
+  CPATH="$CPATH:$with_lua/include"
+  LIBRARY_PATH="$LIBRARY_PATH:$with_lua/lib"
+  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$with_lua/lib"
+fi
+
+# Messages
+printf '#================================================================\n'
+printf '# Configuring Tokyo Tyrant version %s%s.\n' "$PACKAGE_VERSION" "$enables"
+printf '#================================================================\n'
+
+
+
+#================================================================
+# Checking Commands and Libraries
+#================================================================
+
+# C compiler
+AC_PROG_CC
+
+# Reset variables
+if test "$GCC" != "yes"
+then
+  AC_MSG_WARN([another compiler except for GCC was detected])
+  MYCFLAGS=""
+fi
+test -n "$CFLAGS" && MYCFLAGS="$CFLAGS $MYCFLAGS"
+test -n "$CPPFLAGS" && MYCPPFLAGS="$CPPFLAGS $MYCPPFLAGS"
+test -n "$LDFLAGS" && MYLDFLAGS="$LDFLAGS $MYLDFLAGS"
+
+# Byte order
+AC_C_BIGENDIAN(MYCPPFLAGS="$MYCPPFLAGS -D_MYBIGEND")
+
+# Underlying libraries
+AC_CHECK_LIB(c, main)
+AC_CHECK_LIB(m, main)
+AC_CHECK_LIB(pthread, main)
+AC_CHECK_LIB(rt, main)
+AC_CHECK_LIB(dl, main)
+AC_CHECK_LIB(nsl, main)
+AC_CHECK_LIB(socket, main)
+AC_CHECK_LIB(resolv, main)
+AC_CHECK_LIB(z, main)
+AC_CHECK_LIB(bz2, main)
+AC_CHECK_LIB(tokyocabinet, main)
+if test "$enable_lua" = "yes"
+then
+  AC_CHECK_LIB(lua, main)
+  AC_CHECK_LIB(lua$luaver, main)
+fi
+AC_CHECK_LIB(tokyotyrant, main, AC_MSG_WARN([old version of Tokyo Tyrant was detected]))
+
+# Necessary headers
+AC_CHECK_HEADER(stdlib.h, true, AC_MSG_ERROR([stdlib.h is required]))
+AC_CHECK_HEADER(stdint.h, true, AC_MSG_ERROR([stdint.h is required]))
+AC_CHECK_HEADER(unistd.h, true, AC_MSG_ERROR([unistd.h is required]))
+AC_CHECK_HEADER(pthread.h, true, AC_MSG_ERROR([pthread.h is required]))
+AC_CHECK_HEADER(tcutil.h, true, AC_MSG_ERROR([tcutil.h is required]))
+if test "$enable_lua" = "yes"
+then
+  AC_CHECK_HEADER(lua.h, true, AC_MSG_ERROR([lua.h is required]))
+fi
+
+# Shared libraries
+if test "$enable_shared" != "no" && test "$enable_profile" != "yes"
+then
+  if uname | grep Darwin >/dev/null
+  then
+    MYLIBRARYFILES="$MYLIBRARYFILES libtokyotyrant.$MYLIBVER.$MYLIBREV.0.dylib"
+    MYLIBRARYFILES="$MYLIBRARYFILES libtokyotyrant.$MYLIBVER.dylib"
+    MYLIBRARYFILES="$MYLIBRARYFILES libtokyotyrant.dylib"
+    MYLIBRARYFILES="$MYLIBRARYFILES ttskelmock.bundle ttskeldir.bundle ttskelproxy.bundle"
+    MYLIBRARYFILES="$MYLIBRARYFILES ttskelnull.bundle"
+    MYLDLIBPATHENV="DYLD_LIBRARY_PATH"
+  else
+    MYLIBRARYFILES="$MYLIBRARYFILES libtokyotyrant.so.$MYLIBVER.$MYLIBREV.0"
+    MYLIBRARYFILES="$MYLIBRARYFILES libtokyotyrant.so.$MYLIBVER"
+    MYLIBRARYFILES="$MYLIBRARYFILES libtokyotyrant.so"
+    MYLIBRARYFILES="$MYLIBRARYFILES ttskelmock.so ttskeldir.so ttskelproxy.so"
+    MYLIBRARYFILES="$MYLIBRARYFILES ttskelnull.so"
+  fi
+fi
+
+
+
+#================================================================
+# Generic Settings
+#================================================================
+
+# Export variables
+AC_SUBST(MYLIBVER)
+AC_SUBST(MYLIBREV)
+AC_SUBST(MYPROTVER)
+AC_SUBST(MYHEADERFILES)
+AC_SUBST(MYLIBRARYFILES)
+AC_SUBST(MYLIBOBJFILES)
+AC_SUBST(MYCOMMANDFILES)
+AC_SUBST(MYINITFILES)
+AC_SUBST(MYMAN1FILES)
+AC_SUBST(MYMAN3FILES)
+AC_SUBST(MYMAN8FILES)
+AC_SUBST(MYSCREXTFILES)
+AC_SUBST(MYDOCUMENTFILES)
+AC_SUBST(MYPCFILES)
+AC_SUBST(MYCFLAGS)
+AC_SUBST(MYCPPFLAGS)
+AC_SUBST(MYLDFLAGS)
+AC_SUBST(MYCMDLDFLAGS)
+AC_SUBST(MYRUNPATH)
+AC_SUBST(MYLDLIBPATHENV)
+AC_SUBST(MYPOSTCMD)
+
+# Targets
+AC_OUTPUT(Makefile tokyotyrant.pc)
+
+# Messages
+printf '#================================================================\n'
+printf '# Ready to make.\n'
+printf '#================================================================\n'
+
+
+
+# END OF FILE

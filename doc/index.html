@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+<meta http-equiv="Content-Language" content="en" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="Content-Style-Type" content="text/css" />
+<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta name="author" content="FAL Labs" />
+<meta name="keywords" content="Tokyo Tyrant, tokyotyrant, Tokyo Cabinet, database, KVS, memcached, REST" />
+<meta name="description" content="homepage of Tokyo Tyrant" />
+<link rel="contents" href="./" />
+<link rel="stylesheet" href="common.css" />
+<link rev="made" href="mailto:info@fallabs.com" />
+<title>Tokyo Tyrant: network interface of Tokyo Cabinet</title>
+</head>
+
+<body>
+
+<h1 id="headline">Tokyo Tyrant: network interface of Tokyo Cabinet</h1>
+
+<div class="note">Copyright (C) 2007-2010 FAL Labs</div>
+<div class="note">Last Update: Thu, 05 Aug 2010 15:24:29 +0900</div>
+
+<hr />
+
+<h2 id="overview">Overview</h2>
+
+<p>Tokyo Tyrant is a package of network interface to the DBM called Tokyo Cabinet.  Though the DBM has high performance, you might bother in case that multiple processes share the same database, or remote processes access the database.  Thus, Tokyo Tyrant is provided for concurrent and remote connections to Tokyo Cabinet.  It is composed of the server process managing a database and its access library for client applications.</p>
+
+<p>Tokyo Tyrant is written in the C language, and provided as API of C, Perl, and Ruby.  Tokyo Tyrant is available on platforms which have API conforming to C99 and POSIX.  Tokyo Tyrant is a free software licensed under the GNU Lesser General Public License.</p>
+
+<hr />
+
+<h2 id="documents">Documents</h2>
+
+<p>The following are documents of Tokyo Tyrant.  They are contained also in the source package.</p>
+
+<ul>
+<li><a href="spex.html">Fundamental Specifications</a></li>
+</ul>
+
+<ul>
+<li><a href="perldoc/">Specifications of Perl API</a></li>
+<li><a href="rubydoc/">Specifications of Ruby API</a></li>
+</ul>
+
+<hr />
+
+<h2 id="packages">Packages</h2>
+
+<p>The following are the source packages of Tokyo Tyrant.  As for binary packages, see the site of each distributor.</p>
+
+<ul>
+<li><a href="tokyotyrant-1.1.41.tar.gz">Latest Source Package (version 1.1.41)</a></li>
+<li><a href="pastpkg/">Past Versions</a></li>
+</ul>
+
+<ul>
+<li><a href="perlpkg/">API for Perl</a></li>
+<li><a href="rubypkg/">API for Ruby</a></li>
+</ul>
+
+<hr />
+
+<h2 id="information">Information</h2>
+
+<p>Tokyo Tyrant was written and is maintained by <a href="http://fallabs.com/">FAL Labs</a>.  You can contact the author by e-mail to `info@fallabs.com'.</p>
+
+<hr />
+
+</body>
+
+</html>
+
+<!-- END OF FILE -->

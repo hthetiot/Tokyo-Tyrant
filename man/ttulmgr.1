@@ -1,0 +1,40 @@
+.TH "TTULMGR" 1 "2010-08-05" "Man Page" "Tokyo Tyrant"
+
+.SH NAME
+ttulmgr \- the command line utility of the update log API
+
+.SH DESCRIPTION
+.PP
+The command `\fBttulmgr\fR' is the utility to export and import the update log.  It is useful to filter the update log with such text utilities as `\fBgrep\fR' and `\fBsed\fR'.  This command is used in the following format.  `\fIupath\fR' specifies the update log directory.
+.PP
+.RS
+.br
+\fBttulmgr export \fR[\fB\-ts \fInum\fB\fR]\fB \fR[\fB\-sid \fInum\fB\fR]\fB \fIupath\fB\fR
+.RS
+Export the update log as TSV text data to the standard output.
+.RE
+.br
+\fBttulmgr import \fIupath\fB\fR
+.RS
+Import TSV text data from the standard input to the update log.
+.RE
+.RE
+.PP
+Options feature the following.
+.PP
+.RS
+\fB\-ts\fR \fInum\fR : specify the beginning time stamp.
+.br
+\fB\-sid\fR \fInum\fR : specify the self server ID.
+.br
+.RE
+.PP
+This command returns 0 on success, another on failure.
+
+.SH SEE ALSO
+.PP
+.BR ttserver (1),
+.BR ttultest (1),
+.BR ttutil (3),
+.BR tculog (3),
+.BR tcrdb (3)

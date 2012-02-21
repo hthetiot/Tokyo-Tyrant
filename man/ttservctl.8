@@ -1,0 +1,37 @@
+.TH "TTSERVCTL" 1 "2010-08-05" "Man Page" "Tokyo Tyrant"
+
+.SH NAME
+ttserctl \- the startup script of the server of Tokyo Tyrant
+
+.SH DESCRIPTION
+.PP
+The command `\fBttservctl\fR' is the startup script of the server.  It can be called by the RC script of the bootstrap process of the operating system.  This command is used in the following format.
+.PP
+.RS
+.br
+\fBttservctl start\fR
+.RS
+Startup the server.
+.RE
+.br
+\fBttservctl stop\fR
+.RS
+Stop the server.
+.RE
+.br
+\fBttservctl restart\fR
+.RS
+Restart the server.
+.RE
+.br
+\fBttservctl hup\fR
+.RS
+Send HUP signal to the server for log rotation.
+.RE
+.RE
+.PP
+The database is placed as "/var/ttserver/casket.tch".  The log and related files are also placed in "/var/ttserver".  This command returns 0 on success, another on failure.
+
+.SH SEE ALSO
+.PP
+.BR ttserver (1)

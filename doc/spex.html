@@ -1,0 +1,2266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+<meta http-equiv="Content-Language" content="en" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="Content-Style-Type" content="text/css" />
+<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta name="author" content="FAL Labs" />
+<meta name="keywords" content="Tokyo Tyrant, tokyotyrant, Tokyo Cabinet, database, KVS, memcached, REST" />
+<meta name="description" content="specifications of Tokyo Tyrant" />
+<link rel="contents" href="./" />
+<link rel="stylesheet" href="common.css" />
+<link rev="made" href="mailto:info@fallabs.com" />
+<title>Fundamental Specifications of Tokyo Tyrant Version 1</title>
+</head>
+
+<body>
+
+<h1 id="headline">Fundamental Specifications of Tokyo Tyrant Version 1</h1>
+
+<div class="note">Copyright (C) 2007-2010 FAL Labs</div>
+<div class="note">Last Update: Thu, 05 Aug 2010 15:24:29 +0900</div>
+
+<hr />
+
+<h2 id="contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#installation">Installation</a></li>
+<li><a href="#serverprog">Server Programs</a></li>
+<li><a href="#clientprog">Client Programs</a></li>
+<li><a href="#tcrdbapi">Remote Database API</a></li>
+<li><a href="#luaext">Lua Extension</a></li>
+<li><a href="#protocol">Protocol</a></li>
+<li><a href="#tutorial">Tutorial</a></li>
+<li><a href="#license">License</a></li>
+</ol>
+
+<hr />
+
+<h2 id="introduction">Introduction</h2>
+
+<p>Tokyo Tyrant is a package of network interface to the DBM called Tokyo Cabinet.  Though the DBM has high performance, you might bother in case that multiple processes share the same database, or remote processes access the database.  Thus, Tokyo Tyrant is provided for concurrent and remote connections to Tokyo Cabinet.  It is composed of the server process managing a database and its access library for client applications.</p>
+
+<p>The server features high concurrency due to thread-pool modeled implementation and the epoll/kqueue mechanism of the modern Linux/*BSD kernel.  The server and its clients communicate with each other by simple binary protocol on TCP/IP.  Protocols compatible with memcached and HTTP are also supported so that almost all principal platforms and programming languages can use Tokyo Tyrant.  High availability and high integrity are also featured due to such mechanisms as hot backup, update logging, and replication.  The server can embed Lua, a lightweight script language so that you can define arbitrary operations of the database.</p>
+
+<p>Because the server uses the abstract API of Tokyo Cabinet, all of the six APIs: the on-memory hash database API, the on-memory tree database API, the hash API, the B+ tree database API, the fixed-length database API, and the table database API, are available from the client with the common interface.  Moreover, the table extension is provided to use specific features of the table database.</p>
+
+
+<p><em>As for now, the server works on Linux, FreeBSD, Mac OS X, Solaris only.</em></p>
+
+<hr />
+
+<h2 id="installation">Installation</h2>
+
+<p>Install the latest version of Tokyo Cabinet beforehand and get the package of Tokyo Tyrant.</p>
+
+<p>When an archive file of Tokyo Tyrant is extracted, change the current working directory to the generated directory and perform installation.</p>
+
+<p>Run the configuration script.  To enable the Lua extension, add the `--enable-lua' option.</p>
+
+<pre>./configure
+</pre>
+
+<p>Build programs.</p>
+
+<pre>make
+</pre>
+
+<p>Install programs.  This operation must be carried out by the root user.</p>
+
+<pre>make install
+</pre>
+
+<p>When a series of work finishes, the following files will be installed.</p>
+
+<pre>/usr/local/include/ttutil.h
+/usr/local/include/tculog.h
+/usr/local/include/tcrdb.h
+/usr/local/lib/libtokyotyrant.a
+/usr/local/lib/libtokyotyrant.so.x.y.z
+/usr/local/lib/libtokyotyrant.so.x
+/usr/local/lib/libtokyotyrant.so
+/usr/local/lib/ttskelmock.so
+/usr/local/lib/ttskeldir.so
+/usr/local/lib/ttskelproxy.so
+/usr/local/lib/ttskelnull.so
+/usr/local/lib/pkgconfig/tokyotyrant.pc
+/usr/local/bin/ttserver
+/usr/local/bin/ttultest
+/usr/local/bin/ttulmgr
+/usr/local/bin/tcrtest
+/usr/local/bin/tcrmttest
+/usr/local/bin/tcrmgr
+/usr/local/sbin/ttservctl
+/usr/local/share/tokyotyrant/...
+/usr/local/man/man1/...
+/usr/local/man/man3/...
+</pre>
+
+<p>To test the server, perform the following command.  To finish it, press Ctrl-C on the terminal.</p>
+
+<pre>ttserver
+</pre>
+
+<p>To test the client connecting to the above running server, perform the following command on another terminal.</p>
+
+<pre>make check
+</pre>
+
+<hr />
+
+<h2 id="serverprog">Server Programs</h2>
+
+<h3 id="serverprog_ttserver">ttserver</h3>
+
+<p>The command `<code>ttserver</code>' runs the server managing a database instance.  Because the database is treated by the abstract API of Tokyo Cabinet, you can choose the scheme on start-up of the server.  Supported schema are on-memory hash database, on-memory tree database, hash database, and B+ tree database.  This command is used in the following format.  `<var>dbname</var>' specifies the database name.  If it is omitted, on-memory hash database is specified.</p>
+
+<dl class="api">
+<dt><code>ttserver [-host <var>name</var>] [-port <var>num</var>] [-thnum <var>num</var>] [-tout <var>num</var>] [-dmn] [-pid <var>path</var>] [-kl] [-log <var>path</var>] [-ld|-le] [-ulog <var>path</var>] [-ulim <var>num</var>] [-uas] [-sid <var>num</var>] [-mhost <var>name</var>] [-mport <var>num</var>] [-rts <var>path</var>] [-rcc] [-skel <var>name</var>] [-mul <var>num</var>] [-ext <var>path</var>] [-extpc <var>name</var> <var>period</var>] [-mask <var>expr</var>] [-unmask <var>expr</var>] [<var>dbname</var>]</code></dt>
+</dl>
+
+<p>Options feature the following.</p>
+
+<ul class="options">
+<li><code>-host <var>name</var></code> : specify the host name or the address of the server.  By default, every network address is bound.</li>
+<li><code>-port <var>num</var></code> : specify the port number.  By default, it is 1978.</li>
+<li><code>-thnum <var>num</var></code> : specify the number of worker threads.  By default, it is 8.</li>
+<li><code>-tout <var>num</var></code> : specify the timeout of each session in seconds.  By default, no timeout is specified.</li>
+<li><code>-dmn</code> : work as a daemon process.</li>
+<li><code>-pid <var>path</var></code> : output the process ID into the file.</li>
+<li><code>-kl</code> : kill the existing process if the process ID file is detected.</li>
+<li><code>-log <var>path</var></code> : output log messages into the file.</li>
+<li><code>-ld</code> : log debug messages also.</li>
+<li><code>-le</code> : log error messages only.</li>
+<li><code>-ulog <var>path</var></code> : specify the update log directory.</li>
+<li><code>-ulim <var>num</var></code> : specify the limit size of each update log file.</li>
+<li><code>-uas</code> : use asynchronous I/O for the update log.</li>
+<li><code>-sid <var>num</var></code> : specify the server ID.</li>
+<li><code>-mhost <var>name</var></code> : specify the host name of the replication master server.</li>
+<li><code>-mport <var>num</var></code> : specify the port number of the replication master server.</li>
+<li><code>-rts <var>path</var></code> : specify the replication time stamp file.</li>
+<li><code>-rcc</code> : check consistency of replication.</li>
+<li><code>-skel <var>name</var></code> : specify the name of the skeleton database library.</li>
+<li><code>-mul <var>num</var></code> : specify the division number of the multiple database mechanism.</li>
+<li><code>-ext <var>path</var></code> : specify the script language extension file.</li>
+<li><code>-extpc <var>name</var> <var>period</var></code> : specify the function name and the calling period of a periodic command.</li>
+<li><code>-mask <var>expr</var></code> : specify the names of forbidden commands.</li>
+<li><code>-unmask <var>expr</var></code> : specify the names of allowed commands.</li>
+</ul>
+
+<p>To terminate the server normally, send SIGINT or SIGTERM to the process.  It is okay to press Ctrl-C on the controlling terminal.  To restart the server, send SIGHUP to the process.  If the port number is not more than 0, UNIX domain socket is used and the path of the socket file is specified by the host parameter.  This command returns 0 on success, another on failure.</p>
+
+<p>The naming convention of the database is specified by the abstract API of Tokyo Cabinet.  If the name is "*", the database will be an on-memory hash database.  If it is "+", the database will be an on-memory tree database.  If its suffix is ".tch", the database will be a hash database.  If its suffix is ".tcb", the database will be a B+ tree database.  If its suffix is ".tcf", the database will be a fixed-length database.  If its suffix is ".tct", the database will be a table database.  Otherwise, this function fails.  Tuning parameters can trail the name, separated by "#".  Each parameter is composed of the name and the value, separated by "=".  On-memory hash database supports "bnum", "capnum", and "capsiz".  On-memory tree database supports "capnum" and "capsiz".  Hash database supports "mode", "bnum", "apow", "fpow", "opts", "rcnum", "xmsiz", and "dfunit".  B+ tree database supports "mode", "lmemb", "nmemb", "bnum", "apow", "fpow", "opts", "lcnum", "ncnum", "xmsiz", and "dfunit".  Fixed-length database supports "mode", "width", and "limsiz".  Table database supports "mode", "bnum", "apow", "fpow", "opts", "rcnum", "lcnum", "ncnum", "xmsiz", "dfunit", and "idx".  The tuning parameter "capnum" specifies the capacity number of records.  "capsiz" specifies the capacity size of using memory.  Records spilled the capacity are removed by the storing order.  "mode" can contain "w" of writer, "r" of reader, "c" of creating, "t" of truncating, "e" of no locking, and "f" of non-blocking lock.  The default mode is relevant to "wc".  "opts" can contains "l" of large option, "d" of Deflate option, "b" of BZIP2 option, and "t" of TCBS option.  "idx" specifies the column name of an index and its type separated by ":".  For example, "casket.tch#bnum=1000000#opts=ld" means that the name of the database file is "casket.tch", and the bucket number is 1000000, and the options are large and Deflate.</p>
+
+<p>The command mask expression is a list of command names separated by ",".  For example, "out,vanish,copy" means a set of "out", "vanish", and "copy".  Commands of the memcached compatible protocol and the HTTP compatible protocol are also forbidden or allowed, related by the mask of each original command.  Moreover, there are meta expressions.  "all" means all commands.  "allorg" means all commands of the original binary protocol.  "allmc" means all commands of the memcached compatible protocol.  "allhttp" means all commands of the HTTP compatible protocol.  "allread" is the abbreviation of `get', `mget', `vsiz', `iterinit', `iternext', `fwmkeys', `rnum', `size', and `stat'.  "allwrite" is the abbreviation of `put', `putkeep', `putcat', `putshl', `putnr', `out', `addint', `adddouble', `vanish', and `misc'.  "allmanage" is the abbreviation of `sync', `optimize', `copy', `restore', and `setmst'.  "repl" means replication as master.  "slave" means replication as slave.</p>
+
+<h3 id="serverprog_ttservctl">ttservctl</h3>
+
+<p>The command `<code>ttservctl</code>' is the startup script of the server.  It can be called by the RC script of the bootstrap process of the operating system.  This command is used in the following format.</p>
+
+<dl class="api">
+<dt><code>ttservctl start</code></dt>
+<dd>Startup the server.</dd>
+<dt><code>ttservctl stop</code></dt>
+<dd>Stop the server.</dd>
+<dt><code>ttservctl restart</code></dt>
+<dd>Restart the server.</dd>
+<dt><code>ttservctl hup</code></dt>
+<dd>Send HUP signal to the server for log rotation.</dd>
+</dl>
+
+<p>The database is placed as "/var/ttserver/casket.tch".  The log and related files are also placed in "/var/ttserver".  This command returns 0 on success, another on failure.</p>
+
+<h3 id="serverprog_ttulmgr">ttulmgr</h3>
+
+<p>The command `<code>ttulmgr</code>' is the utility to export and import the update log.  It is useful to filter the update log with such text utilities as `<code>grep</code>' and `<code>sed</code>'.  This command is used in the following format.  `<var>upath</var>' specifies the update log directory.</p>
+
+<dl class="api">
+<dt><code>ttulmgr export [-ts <var>num</var>] [-sid <var>num</var>] <var>upath</var></code></dt>
+<dd>Export the update log as TSV text data to the standard output.</dd>
+<dt><code>ttulmgr import <var>upath</var></code></dt>
+<dd>Import TSV text data from the standard input to the update log.</dd>
+</dl>
+
+<p>Options feature the following.</p>
+
+<ul class="options">
+<li><code>-ts <var>num</var></code> : specify the beginning time stamp.</li>
+<li><code>-sid <var>num</var></code> : specify the self server ID.</li>
+</ul>
+
+<p>This command returns 0 on success, another on failure.</p>
+
+<hr />
+
+<h2 id="clientprog">Client Programs</h2>
+
+<h3 id="clientprog_tcrtest">tcrtest</h3>
+
+<p>The command `<code>tcrtest</code>' is a utility for facility test and performance test.  This command is used in the following format.  `<var>host</var>' specifies the host name of the server.  `<var>rnum</var>' specifies the number of iterations.</p>
+
+<dl class="api">
+<dt><code>tcrtest write [-port <var>num</var>] [-cnum <var>num</var>] [-tout <var>num</var>] [-nr] [-rnd] <var>host</var> <var>rnum</var></code></dt>
+<dd>Store records with keys of 8 bytes.  They change as `00000001', `00000002'...</dd>
+<dt><code>tcrtest read [-port <var>num</var>] [-cnum <var>num</var>] [-tout <var>num</var>] [-mul <var>num</var>] [-rnd] <var>host</var></code></dt>
+<dd>Retrieve all records of the database above.</dd>
+<dt><code>tcrtest remove [-port <var>num</var>] [-cnum <var>num</var>] [-tout <var>num</var>] [-rnd] <var>host</var></code></dt>
+<dd>Remove all records of the database above.</dd>
+<dt><code>tcrtest rcat [-port <var>num</var>] [-cnum <var>num</var>] [-tout <var>num</var>] [-shl <var>num</var>] [-dai|-dad] [-ext <var>name</var>] [-xlr|-xlg] <var>host</var> <var>rnum</var></code></dt>
+<dd>Store records with partway duplicated keys using concatenate mode.</dd>
+<dt><code>tcrtest misc [-port <var>num</var>] [-cnum <var>num</var>] [-tout <var>num</var>] <var>host</var> <var>rnum</var></code></dt>
+<dd>Perform miscellaneous test of various operations.</dd>
+<dt><code>tcrtest wicked [-port <var>num</var>] [-cnum <var>num</var>] [-tout <var>num</var>] <var>host</var> <var>rnum</var></code></dt>
+<dd>Perform updating operations of list and map selected at random.</dd>
+<dt><code>tcrtest table [-port <var>num</var>] [-cnum <var>num</var>] [-tout <var>num</var>] [-exp <var>num</var>] <var>host</var> <var>rnum</var></code></dt>
+<dd>Perform miscellaneous test of the table extension.</dd>
+</dl>
+
+<p>Options feature the following.</p>
+
+<ul class="options">
+<li><code>-port <var>num</var></code> : specify the port number.</li>
+<li><code>-cnum <var>num</var></code> : specify the number of connections.</li>
+<li><code>-tout <var>num</var></code> : specify the timeout of each session in seconds.</li>
+<li><code>-nr</code> : use the function `tcrdbputnr' instead of `tcrdbput'.</li>
+<li><code>-rnd</code> : select keys at random.</li>
+<li><code>-mul <var>num</var></code> : specify the number of records for the mget command.</li>
+<li><code>-shl <var>num</var></code> : use `tcrdbputshl' and specify the width.</li>
+<li><code>-dai</code> : use `tcrdbaddint' instead of `tcrdbputcat'.</li>
+<li><code>-dad</code> : use `tcrdbadddouble' instead of `tcrdbputcat'.</li>
+<li><code>-ext <var>name</var></code> : call a script language extension function.</li>
+<li><code>-xlr</code> : perform record locking.</li>
+<li><code>-xlg</code> : perform global locking.</li>
+<li><code>-exp <var>num</var></code> : specify the lifetime of expiration test.</li>
+</ul>
+
+<p>If the port number is not more than 0, UNIX domain socket is used and the path of the socket file is specified by the host parameter.  This command returns 0 on success, another on failure.</p>
+
+<h3 id="clientprog_tcrmttest">tcrmttest</h3>
+
+<p>The command `<code>tcrmttest</code>' is a utility for facility test under multi-thread situation.  This command is used in the following format.  `<var>host</var>' specifies the host name of the server.  `<var>rnum</var>' specifies the number of iterations.</p>
+
+
+<dl class="api">
+<dt><code>tcrmttest write [-port <var>num</var>] [-tnum <var>num</var>] [-nr] [-rnd] [-ext <var>name</var>] <var>host</var> <var>rnum</var></code></dt>
+<dd>Store records with keys of 8 bytes.  They change as `00000001', `00000002'...</dd>
+<dt><code>tcrmttest read [-port <var>num</var>] [-tnum <var>num</var>] [-mul <var>num</var>] <var>host</var></code></dt>
+<dd>Retrieve all records of the database above.</dd>
+<dt><code>tcrmttest remove [-port <var>num</var>] [-tnum <var>num</var>] <var>host</var></code></dt>
+<dd>Remove all records of the database above.</dd>
+</dl>
+
+<p>Options feature the following.</p>
+
+<ul class="options">
+<li><code>-port <var>num</var></code> : specify the port number.</li>
+<li><code>-tnum <var>num</var></code> : specify the number of running threads.</li>
+<li><code>-nr</code> : use the function `tcrdbputnr' instead of `tcrdbput'.</li>
+<li><code>-rnd</code> : select keys at random.</li>
+<li><code>-ext <var>name</var></code> : call a script language extension function.</li>
+<li><code>-mul <var>num</var></code> : specify the number of records for the mget command.</li>
+</ul>
+
+<p>If the port number is not more than 0, UNIX domain socket is used and the path of the socket file is specified by the host parameter.  This command returns 0 on success, another on failure.</p>
+
+<h3 id="clientprog_tcrmgr">tcrmgr</h3>
+
+<p>The command `<code>tcrmgr</code>' is a utility for test and debugging of the remote database API and its applications.  `<var>host</var>' specifies the host name of the server.  `<var>key</var>' specifies the key of a record.  `<var>value</var>' specifies the value of a record.  `<var>params</var>' specifies the tuning parameters.  `<var>dpath</var>' specifies the destination file.  `<var>func</var> specifies the name of the function.  `<var>arg</var>' specifies the arguments of the function.  `<var>file</var>' specifies the input file.  `<var>upath</var>' specifies the update log directory.  `<var>mhost</var>' specifies the host name of the replication master.  `<var>url</var>' specifies the target URL.</p>
+
+<dl class="api">
+<dt><code>tcrmgr inform [-port <var>num</var>] [-st] <var>host</var></code></dt>
+<dd>Print miscellaneous information to the standard output.</dd>
+<dt><code>tcrmgr put [-port <var>num</var>] [-sx] [-sep <var>chr</var>] [-dk|-dc|-dai|-dad] <var>host</var> <var>key</var> <var>value</var></code></dt>
+<dd>Store a record.</dd>
+<dt><code>tcrmgr out [-port <var>num</var>] [-sx] [-sep <var>chr</var>] <var>host</var> <var>key</var></code></dt>
+<dd>Remove a record.</dd>
+<dt><code>tcrmgr get [-port <var>num</var>] [-sx] [-sep <var>chr</var>] [-px] [-pz] <var>host</var> <var>key</var></code></dt>
+<dd>Print the value of a record.</dd>
+<dt><code>tcrmgr mget [-port <var>num</var>] [-sx] [-sep <var>chr</var>] [-px] <var>host</var> [<var>key</var>...]</code></dt>
+<dd>Print keys and values of multiple records.</dd>
+<dt><code>tcrmgr list [-port <var>num</var>] [-sep <var>chr</var>] [-m <var>num</var>] [-pv] [-px] [-fm <var>str</var>] <var>host</var></code></dt>
+<dd>Print keys of all records, separated by line feeds.</dd>
+<dt><code>tcrmgr ext [-port <var>num</var>] [-xlr|-xlg] [-sx] [-sep <var>chr</var>] [-px] <var>host</var> <var>func</var> [<var>key</var> [<var>value</var>]]</code></dt>
+<dd>Call a script language extension function.</dd>
+<dt><code>tcrmgr sync [-port <var>num</var>] <var>host</var></code></dt>
+<dd>Synchronize updated contents with the database file.</dd>
+<dt><code>tcrmgr optimize [-port <var>num</var>] <var>host</var> [<var>params</var>]</code></dt>
+<dd>Optimize the database file.</dd>
+<dt><code>tcrmgr vanish [-port <var>num</var>] <var>host</var></code></dt>
+<dd>Remove all records.</dd>
+<dt><code>tcrmgr copy [-port <var>num</var>] <var>host</var> <var>dpath</var></code></dt>
+<dd>Copy the database file.</dd>
+<dt><code>tcrmgr misc [-port <var>num</var>] [-mnu] [-sx] [-sep <var>chr</var>] [-px] <var>host</var> <var>func</var> [<var>arg</var>...]</code></dt>
+<dd>Call a versatile function for miscellaneous operations.</dd>
+<dt><code>tcrmgr importtsv [-port <var>num</var>] [-nr] [-sc] <var>host</var> [<var>file</var>]</code></dt>
+<dd>Store records of TSV in each line of a file.</dd>
+<dt><code>tcrmgr restore [-port <var>num</var>] [-ts <var>num</var>] [-rcc] <var>host</var> <var>upath</var></code></dt>
+<dd>Restore the database with update log.</dd>
+<dt><code>tcrmgr setmst [-port <var>num</var>] [-mport <var>num</var>] [-ts <var>num</var>] [-rcc] <var>host</var> [<var>mhost</var>]</code></dt>
+<dd>Set the replication master.</dd>
+<dt><code>tcrmgr repl [-port <var>num</var>] [-ts <var>num</var>] [-sid <var>num</var>] [-ph] <var>host</var></code></dt>
+<dd>Replicate the update log.</dd>
+<dt><code>tcrmgr http [-ah <var>name</var> <var>value</var>] [-ih] <var>url</var></code></dt>
+<dd>Fetch the resource of a URL by HTTP.</dd>
+<dt><code>tcrmgr version</code></dt>
+<dd>Print the version information of Tokyo Tyrant.</dd>
+</dl>
+
+<p>Options feature the following.</p>
+
+<ul class="options">
+<li><code>-port <var>num</var></code> : specify the port number.</li>
+<li><code>-st</code> : print miscellaneous status data.</li>
+<li><code>-sx</code> : input data is evaluated as a hexadecimal data string.</li>
+<li><code>-sep <var>chr</var></code> : specify the separator of the input data.</li>
+<li><code>-dk</code> : use the function `tcrdbputkeep' instead of `tcrdbput'.</li>
+<li><code>-dc</code> : use the function `tcrdbputcat' instead of `tcrdbput'.</li>
+<li><code>-dai</code> : use the function `tcrdbaddint' instead of `tcrdbput'.</li>
+<li><code>-dad</code> : use the function `tcrdbadddouble' instead of `tcrdbput'.</li>
+<li><code>-px</code> : output data is converted into a hexadecimal data string.</li>
+<li><code>-pz</code> : do not append line feed at the end of the output.</li>
+<li><code>-m <var>num</var></code> : specify the maximum number of the output.</li>
+<li><code>-pv</code> : print values of records also.</li>
+<li><code>-fm <var>str</var></code> : specify the prefix of keys.</li>
+<li><code>-xlr</code> : perform record locking.</li>
+<li><code>-xlg</code> : perform global locking.</li>
+<li><code>-mnu</code> : omit the update log.</li>
+<li><code>-nr</code> : use the function `tcrdbputnr' instead of `tcrdbput'.</li>
+<li><code>-sc</code> : normalize keys as lower cases.</li>
+<li><code>-mport <var>num</var></code> : specify the port number of the replication master.</li>
+<li><code>-ts <var>num</var></code> : specify the beginning time stamp.</li>
+<li><code>-rcc</code> : check consistency of replication.</li>
+<li><code>-sid <var>num</var></code> : specify the self server ID.</li>
+<li><code>-ph</code> : print human-readable data.</li>
+<li><code>-ah <var>name</var> <var>value</var></code> : add a request header.</li>
+<li><code>-ih</code> : output response headers also.</li>
+</ul>
+
+<p>If the port number is not more than 0, UNIX domain socket is used and the path of the socket file is specified by the host parameter.  This command returns 0 on success, another on failure.</p>
+
+<hr />
+
+<h2 id="tcrdbapi">Remote Database API</h2>
+
+<p>Remote database is a set of interfaces to use an abstract database of Tokyo Cabinet, mediated by a server of Tokyo Tyrant.  See `<code>tcrdb.h</code>' for entire specification.</p>
+
+<h3 id="clientprog_description">Description</h3>
+
+<p>To use the remote database API, include `<code>tcrdb.h</code>' and related standard header files.  Usually, write the following description near the front of a source file.</p>
+
+<dl>
+<dt><code>#include &lt;tcrdb.h&gt;</code></dt>
+<dt><code>#include &lt;stdlib.h&gt;</code></dt>
+<dt><code>#include &lt;stdbool.h&gt;</code></dt>
+<dt><code>#include &lt;stdint.h&gt;</code></dt>
+</dl>
+
+<p>Objects whose type is pointer to `<code>TCRDB</code>' are used to handle remote databases.  A remote database object is created with the function `<code>tcrdbnew</code>' and is deleted with the function `<code>tcrdbdel</code>'.  To avoid memory leak, it is important to delete every object when it is no longer in use.</p>
+
+<p>Before operations to store or retrieve records, it is necessary to connect the remote database object to the server.  The function `<code>tcrdbopen</code>' is used to open a database connection and the function `<code>tcrdbclose</code>' is used to close the connection.</p>
+
+<h3 id="tcrdbapi_api">API</h3>
+
+<p>The function `tcrdberrmsg' is used in order to get the message string corresponding to an error code.</p>
+
+<dl class="api">
+<dt><code>const char *tcrdberrmsg(int <var>ecode</var>);</code></dt>
+<dd>`<var>ecode</var>' specifies the error code.</dd>
+<dd>The return value is the message string of the error code.</dd>
+</dl>
+
+<p>The function `tcrdbnew' is used in order to create a remote database object.</p>
+
+<dl class="api">
+<dt><code>TCRDB *tcrdbnew(void);</code></dt>
+<dd>The return value is the new remote database object.</dd>
+</dl>
+
+<p>The function `tcrdbdel' is used in order to delete a remote database object.</p>
+
+<dl class="api">
+<dt><code>void tcrdbdel(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+</dl>
+
+<p>The function `tcrdbecode' is used in order to get the last happened error code of a remote database object.</p>
+
+<dl class="api">
+<dt><code>int tcrdbecode(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>The return value is the last happened error code.</dd>
+<dd>The following error code is defined: `TTESUCCESS' for success, `TTEINVALID' for invalid operation, `TTENOHOST' for host not found, `TTEREFUSED' for connection refused, `TTESEND' for send error, `TTERECV' for recv error, `TTEKEEP' for existing record, `TTENOREC' for no record found, `TTEMISC' for miscellaneous error.</dd>
+</dl>
+
+<p>The function `tcrdbtune' is used in order to set the tuning parameters of a hash database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbtune(TCRDB *<var>rdb</var>, double <var>timeout</var>, int <var>opts</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>timeout</var>' specifies the timeout of each query in seconds.  If it is not more than 0, the timeout is not specified.</dd>
+<dd>`<var>opts</var>' specifies options by bitwise-or: `RDBTRECON' specifies that the connection is recovered automatically when it is disconnected.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>Note that the tuning parameters should be set before the database is opened.</dd>
+</dl>
+
+<p>The function `tcrdbopen' is used in order to open a remote database.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbopen(TCRDB *<var>rdb</var>, const char *<var>host</var>, int <var>port</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>host</var>' specifies the name or the address of the server.</dd>
+<dd>`<var>port</var>' specifies the port number.  If it is not more than 0, UNIX domain socket is used and the path of the socket file is specified by the host parameter.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbopen2' is used in order to open a remote database with a simple server expression.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbopen2(TCRDB *<var>rdb</var>, const char *<var>expr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>expr</var>' specifies the simple server expression.  It is composed of two substrings separated by ":".  The former field specifies the name or the address of the server.  The latter field specifies the port number.  If the latter field is omitted, the default port number is specified.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbclose' is used in order to close a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbclose(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbput' is used in order to store a record into a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbput(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, const void *<var>vbuf</var>, int <var>vsiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>vbuf</var>' specifies the pointer to the region of the value.</dd>
+<dd>`<var>vsiz</var>' specifies the size of the region of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, it is overwritten.</dd>
+</dl>
+
+<p>The function `tcrdbput2' is used in order to store a string record into a remote object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbput2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>, const char *<var>vstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>`<var>vstr</var>' specifies the string of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, it is overwritten.</dd>
+</dl>
+
+<p>The function `tcrdbputkeep' is used in order to store a new record into a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputkeep(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, const void *<var>vbuf</var>, int <var>vsiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>vbuf</var>' specifies the pointer to the region of the value.</dd>
+<dd>`<var>vsiz</var>' specifies the size of the region of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, this function has no effect.</dd>
+</dl>
+
+<p>The function `tcrdbputkeep2' is used in order to store a new string record into a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputkeep2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>, const char *<var>vstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>`<var>vstr</var>' specifies the string of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, this function has no effect.</dd>
+</dl>
+
+<p>The function `tcrdbputcat' is used in order to concatenate a value at the end of the existing record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputcat(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, const void *<var>vbuf</var>, int <var>vsiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>vbuf</var>' specifies the pointer to the region of the value.</dd>
+<dd>`<var>vsiz</var>' specifies the size of the region of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If there is no corresponding record, a new record is created.</dd>
+</dl>
+
+<p>The function `tcrdbputcat2' is used in order to concatenate a string value at the end of the existing record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputcat2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>, const char *<var>vstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>`<var>vstr</var>' specifies the string of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If there is no corresponding record, a new record is created.</dd>
+</dl>
+
+<p>The function `tcrdbputshl' is used in order to concatenate a value at the end of the existing record and shift it to the left.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputshl(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, const void *<var>vbuf</var>, int <var>vsiz</var>, int <var>width</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>vbuf</var>' specifies the pointer to the region of the value.</dd>
+<dd>`<var>vsiz</var>' specifies the size of the region of the value.</dd>
+<dd>`<var>width</var>' specifies the width of the record.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If there is no corresponding record, a new record is created.</dd>
+</dl>
+
+<p>The function `tcrdbputshl2' is used in order to concatenate a string value at the end of the existing record and shift it to the left.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputshl2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>, const char *<var>vstr</var>, int <var>width</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>`<var>vstr</var>' specifies the string of the value.</dd>
+<dd>`<var>width</var>' specifies the width of the record.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If there is no corresponding record, a new record is created.</dd>
+</dl>
+
+<p>The function `tcrdbputnr' is used in order to store a record into a remote database object without response from the server.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputnr(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, const void *<var>vbuf</var>, int <var>vsiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>vbuf</var>' specifies the pointer to the region of the value.</dd>
+<dd>`<var>vsiz</var>' specifies the size of the region of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, it is overwritten.</dd>
+</dl>
+
+<p>The function `tcrdbputnr2' is used in order to store a string record into a remote object without response from the server.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbputnr2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>, const char *<var>vstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>`<var>vstr</var>' specifies the string of the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, it is overwritten.</dd>
+</dl>
+
+<p>The function `tcrdbout' is used in order to remove a record of a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbout(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbout2' is used in order to remove a string record of a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbout2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbget' is used in order to retrieve a record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>void *tcrdbget(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, int *<var>sp</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>sp</var>' specifies the pointer to the variable into which the size of the region of the return value is assigned.</dd>
+<dd>If successful, the return value is the pointer to the region of the value of the corresponding record.  `NULL' is returned if no record corresponds.</dd>
+<dd>Because an additional zero code is appended at the end of the region of the return value, the return value can be treated as a character string.  Because the region of the return value is allocated with the `malloc' call, it should be released with the `free' call when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbget2' is used in order to retrieve a string record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>char *tcrdbget2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>If successful, the return value is the string of the value of the corresponding record.  `NULL' is returned if no record corresponds.</dd>
+<dd>Because the region of the return value is allocated with the `malloc' call, it should be released with the `free' call when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbget3' is used in order to retrieve records in a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbget3(TCRDB *<var>rdb</var>, TCMAP *<var>recs</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>recs</var>' specifies a map object containing the retrieval keys.  As a result of this function, keys existing in the database have the corresponding values and keys not existing in the database are removed.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbvsiz' is used in order to get the size of the value of a record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>int tcrdbvsiz(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>If successful, the return value is the size of the value of the corresponding record, else, it is -1.</dd>
+</dl>
+
+<p>The function `tcrdbvsiz2' is used in order to get the size of the value of a string record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>int tcrdbvsiz2(TCRDB *<var>rdb</var>, const char *<var>kstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>If successful, the return value is the size of the value of the corresponding record, else, it is -1.</dd>
+</dl>
+
+<p>The function `tcrdbiterinit' is used in order to initialize the iterator of a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbiterinit(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>The iterator is used in order to access the key of every record stored in a database.</dd>
+</dl>
+
+<p>The function `tcrdbiternext' is used in order to get the next key of the iterator of a remote database object.</p>
+
+<dl class="api">
+<dt><code>void *tcrdbiternext(TCRDB *<var>rdb</var>, int *<var>sp</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>sp</var>' specifies the pointer to the variable into which the size of the region of the return value is assigned.</dd>
+<dd>If successful, the return value is the pointer to the region of the next key, else, it is `NULL'.  `NULL' is returned when no record is to be get out of the iterator.</dd>
+<dd>Because an additional zero code is appended at the end of the region of the return value, the return value can be treated as a character string.  Because the region of the return value is allocated with the `malloc' call, it should be released with the `free' call when it is no longer in use.  The iterator can be updated by multiple connections and then it is not assured that every record is traversed.</dd>
+</dl>
+
+<p>The function `tcrdbiternext2' is used in order to get the next key string of the iterator of a remote database object.</p>
+
+<dl class="api">
+<dt><code>char *tcrdbiternext2(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>If successful, the return value is the string of the next key, else, it is `NULL'.  `NULL' is returned when no record is to be get out of the iterator.</dd>
+<dd>Because the region of the return value is allocated with the `malloc' call, it should be released with the `free' call when it is no longer in use.  The iterator can be updated by multiple connections and then it is not assured that every record is traversed.</dd>
+</dl>
+
+<p>The function `tcrdbfwmkeys' is used in order to get forward matching keys in a remote database object.</p>
+
+<dl class="api">
+<dt><code>TCLIST *tcrdbfwmkeys(TCRDB *<var>rdb</var>, const void *<var>pbuf</var>, int <var>psiz</var>, int <var>max</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>pbuf</var>' specifies the pointer to the region of the prefix.</dd>
+<dd>`<var>psiz</var>' specifies the size of the region of the prefix.</dd>
+<dd>`<var>max</var>' specifies the maximum number of keys to be fetched.  If it is negative, no limit is specified.</dd>
+<dd>The return value is a list object of the corresponding keys.  This function does never fail.  It returns an empty list even if no key corresponds.</dd>
+<dd>Because the object of the return value is created with the function `tclistnew', it should be deleted with the function `tclistdel' when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbfwmkeys2' is used in order to get forward matching string keys in a remote database object.</p>
+
+<dl class="api">
+<dt><code>TCLIST *tcrdbfwmkeys2(TCRDB *<var>rdb</var>, const char *<var>pstr</var>, int <var>max</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>pstr</var>' specifies the string of the prefix.</dd>
+<dd>`<var>max</var>' specifies the maximum number of keys to be fetched.  If it is negative, no limit is specified.</dd>
+<dd>The return value is a list object of the corresponding keys.  This function does never fail.  It returns an empty list even if no key corresponds.</dd>
+<dd>Because the object of the return value is created with the function `tclistnew', it should be deleted with the function `tclistdel' when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbaddint' is used in order to add an integer to a record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>int tcrdbaddint(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, int <var>num</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>num</var>' specifies the additional value.</dd>
+<dd>If successful, the return value is the summation value, else, it is `INT_MIN'.</dd>
+<dd>If the corresponding record exists, the value is treated as an integer and is added to.  If no record corresponds, a new record of the additional value is stored.</dd>
+</dl>
+
+<p>The function `tcrdbadddouble' is used in order to add a real number to a record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>double tcrdbadddouble(TCRDB *<var>rdb</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, double <var>num</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>num</var>' specifies the additional value.</dd>
+<dd>If successful, the return value is the summation value, else, it is Not-a-Number.</dd>
+<dd>If the corresponding record exists, the value is treated as a real number and is added to.  If no record corresponds, a new record of the additional value is stored.</dd>
+</dl>
+
+<p>The function `tcrdbext' is used in order to call a function of the script language extension.</p>
+
+<dl class="api">
+<dt><code>void *tcrdbext(TCRDB *<var>rdb</var>, const char *<var>name</var>, int <var>opts</var>, const void *<var>kbuf</var>, int <var>ksiz</var>, const void *<var>vbuf</var>, int <var>vsiz</var>, int *<var>sp</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>name</var>' specifies the function name.</dd>
+<dd>`<var>opts</var>' specifies options by bitwise-or: `RDBXOLCKREC' for record locking, `RDBXOLCKGLB' for global locking.</dd>
+<dd>`<var>kbuf</var>' specifies the pointer to the region of the key.</dd>
+<dd>`<var>ksiz</var>' specifies the size of the region of the key.</dd>
+<dd>`<var>vbuf</var>' specifies the pointer to the region of the value.</dd>
+<dd>`<var>vsiz</var>' specifies the size of the region of the value.</dd>
+<dd>`<var>sp</var>' specifies the pointer to the variable into which the size of the region of the return value is assigned.</dd>
+<dd>If successful, the return value is the pointer to the region of the value of the response.  `NULL' is returned on failure.</dd>
+<dd>Because an additional zero code is appended at the end of the region of the return value, the return value can be treated as a character string.  Because the region of the return value is allocated with the `malloc' call, it should be released with the `free' call when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbext2' is used in order to call a function of the script language extension with string parameters.</p>
+
+<dl class="api">
+<dt><code>char *tcrdbext2(TCRDB *<var>rdb</var>, const char *<var>name</var>, int <var>opts</var>, const char *<var>kstr</var>, const char *<var>vstr</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>name</var>' specifies the function name.</dd>
+<dd>`<var>opts</var>' specifies options by bitwise-or: `RDBXOLCKREC' for record locking, `RDBXOLCKGLB' for global locking.</dd>
+<dd>`<var>kstr</var>' specifies the string of the key.</dd>
+<dd>`<var>vstr</var>' specifies the string of the value.</dd>
+<dd>If successful, the return value is the string of the value of the response.  `NULL' is returned on failure.</dd>
+<dd>Because the region of the return value is allocated with the `malloc' call, it should be released with the `free' call when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbsync' is used in order to synchronize updated contents of a remote database object with the file and the device.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbsync(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdboptimize' is used in order to optimize the storage of a remove database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdboptimize(TCRDB *<var>rdb</var>, const char *<var>params</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>params</var>' specifies the string of the tuning parameters.  If it is `NULL', it is not used.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbvanish' is used in order to remove all records of a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbvanish(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbcopy' is used in order to copy the database file of a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbcopy(TCRDB *<var>rdb</var>, const char *<var>path</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>path</var>' specifies the path of the destination file.  If it begins with `@', the trailing substring is executed as a command line.</dd>
+<dd>If successful, the return value is true, else, it is false.  False is returned if the executed command returns non-zero code.</dd>
+<dd>The database file is assured to be kept synchronized and not modified while the copying or executing operation is in progress.  So, this function is useful to create a backup file of the database file.</dd>
+</dl>
+
+<p>The function `tcrdbrestore' is used in order to restore the database file of a remote database object from the update log.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbrestore(TCRDB *<var>rdb</var>, const char *<var>path</var>, uint64_t <var>ts</var>, int <var>opts</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>path</var>' specifies the path of the update log directory.</dd>
+<dd>`<var>opts</var>' specifies options by bitwise-or: `RDBROCHKCON' for consistency checking.</dd>
+<dd>`<var>ts</var>' specifies the beginning time stamp in microseconds.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbsetmst' is used in order to set the replication master of a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbsetmst(TCRDB *<var>rdb</var>, const char *<var>host</var>, int <var>port</var>, uint64_t <var>ts</var>, int <var>opts</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>host</var>' specifies the name or the address of the server.  If it is `NULL', replication of the database is disabled.</dd>
+<dd>`<var>port</var>' specifies the port number.</dd>
+<dd>`<var>ts</var>' specifies the beginning timestamp in microseconds.</dd>
+<dd>`<var>opts</var>' specifies options by bitwise-or: `RDBROCHKCON' for consistency checking.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbsetmst2' is used in order to set the replication master of a remote database object with a simple server expression.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbsetmst2(TCRDB *<var>rdb</var>, const char *<var>expr</var>, uint64_t <var>ts</var>, int <var>opts</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>expr</var>' specifies the simple server expression.  It is composed of two substrings separated by ":".  The former field specifies the name or the address of the server.  The latter field specifies the port number.  If the latter field is omitted, the default port number is specified.</dd>
+<dd>`<var>ts</var>' specifies the beginning timestamp in microseconds.</dd>
+<dd>`<var>opts</var>' specifies options by bitwise-or: `RDBROCHKCON' for consistency checking.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbrnum' is used in order to get the number of records of a remote database object.</p>
+
+<dl class="api">
+<dt><code>uint64_t tcrdbrnum(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>The return value is the number of records or 0 if the object does not connect to any database server.</dd>
+</dl>
+
+<p>The function `tcrdbsize' is used in order to get the size of the database of a remote database object.</p>
+
+<dl class="api">
+<dt><code>uint64_t tcrdbsize(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>The return value is the size of the database or 0 if the object does not connect to any database server.</dd>
+</dl>
+
+<p>The function `tcrdbstat' is used in order to get the status string of the database of a remote database object.</p>
+
+<dl class="api">
+<dt><code>char *tcrdbstat(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>The return value is the status message of the database or `NULL' if the object does not connect to any database server.  The message format is TSV.  The first field of each line means the parameter name and the second field means the value.</dd>
+<dd>Because the region of the return value is allocated with the `malloc' call, it should be released with the `free' call when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbmisc' is used in order to call a versatile function for miscellaneous operations of a remote database object.</p>
+
+<dl class="api">
+<dt><code>TCLIST *tcrdbmisc(TCRDB *<var>rdb</var>, const char *<var>name</var>, int <var>opts</var>, const TCLIST *<var>args</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>name</var>' specifies the name of the function.  All databases support "put", "out", "get", "putlist", "outlist", and "getlist".  "put" is to store a record.  It receives a key and a value, and returns an empty list.  "out" is to remove a record.  It receives a key, and returns an empty list.  "get" is to retrieve a record.  It receives a key, and returns a list of the values.  "putlist" is to store records.  It receives keys and values one after the other, and returns an empty list.  "outlist" is to remove records.  It receives keys, and returns an empty list.  "getlist" is to retrieve records.  It receives keys, and returns keys and values of corresponding records one after the other.</dd>
+<dd>`<var>opts</var>' specifies options by bitwise-or: `RDBMONOULOG' for omission of the update log.</dd>
+<dd>`<var>args</var>' specifies a list object containing arguments.</dd>
+<dd>If successful, the return value is a list object of the result.  `NULL' is returned on failure.</dd>
+<dd>Because the object of the return value is created with the function `tclistnew', it should be deleted with the function `tclistdel' when it is no longer in use.</dd>
+</dl>
+
+<h3 id="tcrdbapi_apitbl">API of the Table Extension</h3>
+
+<p>The function `tcrdbtblput' is used in order to store a record into a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbtblput(TCRDB *<var>rdb</var>, const void *<var>pkbuf</var>, int <var>pksiz</var>, TCMAP *<var>cols</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>pkbuf</var>' specifies the pointer to the region of the primary key.</dd>
+<dd>`<var>pksiz</var>' specifies the size of the region of the primary key.</dd>
+<dd>`<var>cols</var>' specifies a map object containing columns.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, it is overwritten.</dd>
+</dl>
+
+<p>The function `tcrdbtblputkeep' is used in order to store a new record into a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbtblputkeep(TCRDB *<var>rdb</var>, const void *<var>pkbuf</var>, int <var>pksiz</var>, TCMAP *<var>cols</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>pkbuf</var>' specifies the pointer to the region of the primary key.</dd>
+<dd>`<var>pksiz</var>' specifies the size of the region of the primary key.</dd>
+<dd>`<var>cols</var>' specifies a map object containing columns.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If a record with the same key exists in the database, this function has no effect.</dd>
+</dl>
+
+<p>The function `tcrdbtblputcat' is used in order to concatenate columns of the existing record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbtblputcat(TCRDB *<var>rdb</var>, const void *<var>pkbuf</var>, int <var>pksiz</var>, TCMAP *<var>cols</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>pkbuf</var>' specifies the pointer to the region of the primary key.</dd>
+<dd>`<var>pksiz</var>' specifies the size of the region of the primary key.</dd>
+<dd>`<var>cols</var>' specifies a map object containing columns.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dd>If there is no corresponding record, a new record is created.</dd>
+</dl>
+
+<p>The function `tcrdbtblout' is used in order to remove a record of a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbtblout(TCRDB *<var>rdb</var>, const void *<var>pkbuf</var>, int <var>pksiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>pkbuf</var>' specifies the pointer to the region of the primary key.</dd>
+<dd>`<var>pksiz</var>' specifies the size of the region of the primary key.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbtblget' is used in order to retrieve a record in a remote database object.</p>
+
+<dl class="api">
+<dt><code>TCMAP *tcrdbtblget(TCRDB *<var>rdb</var>, const void *<var>pkbuf</var>, int <var>pksiz</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>pkbuf</var>' specifies the pointer to the region of the primary key.</dd>
+<dd>`<var>pksiz</var>' specifies the size of the region of the primary key.</dd>
+<dd>If successful, the return value is a map object of the columns of the corresponding record.  `NULL' is returned if no record corresponds.</dd>
+<dd>Because the object of the return value is created with the function `tcmapnew', it should be deleted with the function `tcmapdel' when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbtblsetindex' is used in order to set a column index to a remote database object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbtblsetindex(TCRDB *<var>rdb</var>, const char *<var>name</var>, int <var>type</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>`<var>name</var>' specifies the name of a column.  If the name of an existing index is specified, the index is rebuilt.  An empty string means the primary key.</dd>
+<dd>`<var>type</var>' specifies the index type: `RDBITLEXICAL' for lexical string, `RDBITDECIMAL' for decimal string, `RDBITTOKEN' for token inverted index, `RDBITQGRAM' for q-gram inverted index.  If it is `RDBITOPT', the index is optimized.  If it is `RDBITVOID', the index is removed.  If `RDBITKEEP' is added by bitwise-or and the index exists, this function merely returns failure.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbtblgenuid' is used in order to generate a unique ID number of a remote database object.</p>
+
+<dl class="api">
+<dt><code>int64_t tcrdbtblgenuid(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>The return value is the new unique ID number or -1 on failure.</dd>
+</dl>
+
+<p>The function `tcrdbqrynew' is used in order to create a query object.</p>
+
+<dl class="api">
+<dt><code>RDBQRY *tcrdbqrynew(TCRDB *<var>rdb</var>);</code></dt>
+<dd>`<var>rdb</var>' specifies the remote database object.</dd>
+<dd>The return value is the new query object.</dd>
+</dl>
+
+<p>The function `tcrdbqrydel' is used in order to delete a query object.</p>
+
+<dl class="api">
+<dt><code>void tcrdbqrydel(RDBQRY *<var>qry</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+</dl>
+
+<p>The function `tcrdbqryaddcond' is used in order to add a narrowing condition to a query object.</p>
+
+<dl class="api">
+<dt><code>void tcrdbqryaddcond(RDBQRY *<var>qry</var>, const char *<var>name</var>, int <var>op</var>, const char *<var>expr</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+<dd>`<var>name</var>' specifies the name of a column.  An empty string means the primary key.</dd>
+<dd>`<var>op</var>' specifies an operation type: `RDBQCSTREQ' for string which is equal to the expression, `RDBQCSTRINC' for string which is included in the expression, `RDBQCSTRBW' for string which begins with the expression, `RDBQCSTREW' for string which ends with the expression, `RDBQCSTRAND' for string which includes all tokens in the expression, `RDBQCSTROR' for string which includes at least one token in the expression, `RDBQCSTROREQ' for string which is equal to at least one token in the expression, `RDBQCSTRRX' for string which matches regular expressions of the expression, `RDBQCNUMEQ' for number which is equal to the expression, `RDBQCNUMGT' for number which is greater than the expression, `RDBQCNUMGE' for number which is greater than or equal to the expression, `RDBQCNUMLT' for number which is less than the expression, `RDBQCNUMLE' for number which is less than or equal to the expression, `RDBQCNUMBT' for number which is between two tokens of the expression, `RDBQCNUMOREQ' for number which is equal to at least one token in the expression, `RDBQCFTSPH' for full-text search with the phrase of the expression, `RDBQCFTSAND' for full-text search with all tokens in the expression, `RDBQCFTSOR' for full-text search with at least one token in the expression, `RDBQCFTSEX' for full-text search with the compound expression.  All operations can be flagged by bitwise-or: `RDBQCNEGATE' for negation, `RDBQCNOIDX' for using no index.</dd>
+<dd>`<var>expr</var>' specifies an operand exression.</dd>
+</dl>
+
+<p>The function `tcrdbqrysetorder' is used in order to set the order of a query object.</p>
+
+<dl class="api">
+<dt><code>void tcrdbqrysetorder(RDBQRY *<var>qry</var>, const char *<var>name</var>, int <var>type</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+<dd>`<var>name</var>' specifies the name of a column.  An empty string means the primary key.</dd>
+<dd>`<var>type</var>' specifies the order type: `RDBQOSTRASC' for string ascending, `RDBQOSTRDESC' for string descending, `RDBQONUMASC' for number ascending, `RDBQONUMDESC' for number descending.</dd>
+</dl>
+
+<p>The function `tcrdbqrysetlimit' is used in order to set the limit number of records of the result of a query object.</p>
+
+<dl class="api">
+<dt><code>void tcrdbqrysetlimit(RDBQRY *<var>qry</var>, int <var>max</var>, int <var>skip</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+<dd>`<var>max</var>' specifies the maximum number of records of the result.  If it is negative, no limit is specified.</dd>
+<dd>`<var>skip</var>' specifies the number of skipped records of the result.  If it is not more than 0, no record is skipped.</dd>
+</dl>
+
+<p>The function `tcrdbqrysearch' is used in order to execute the search of a query object.</p>
+
+<dl class="api">
+<dt><code>TCLIST *tcrdbqrysearch(RDBQRY *<var>qry</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+<dd>The return value is a list object of the primary keys of the corresponding records.  This function does never fail.  It returns an empty list even if no record corresponds.</dd>
+<dd>Because the object of the return value is created with the function `tclistnew', it should be deleted with the function `tclistdel' when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbqrysearchout' is used in order to remove each record corresponding to a query object.</p>
+
+<dl class="api">
+<dt><code>bool tcrdbqrysearchout(RDBQRY *<var>qry</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object of the database.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+</dl>
+
+<p>The function `tcrdbqrysearchget' is used in order to get records corresponding to the search of a query object.</p>
+
+<dl class="api">
+<dt><code>TCLIST *tcrdbqrysearchget(RDBQRY *<var>qry</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+<dd>The return value is a list object of zero separated columns of the corresponding records.</dd>
+<dd>This function does never fail.  It returns an empty list even if no record corresponds.  Each element of the list can be treated with the function `tcrdbqryrescols'.  Because the object of the return value is created with the function `tclistnew', it should be deleted with the function `tclistdel' when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbqryrescols' is used in order to get columns of a record in a search result.</p>
+
+<dl class="api">
+<dt><code>TCMAP *tcrdbqryrescols(TCLIST *<var>res</var>, int <var>index</var>);</code></dt>
+<dd>`<var>res</var>' specifies a list of zero separated columns of the search result.</dd>
+<dd>`<var>index</var>' the index of a element of the search result.</dd>
+<dd>The return value is a map object containing columns.</dd>
+<dd>Because the object of the return value is created with the function `tcmapnew', it should be deleted with the function `tcmapdel' when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbqrysearchcount' is used in order to get the count of corresponding records of a query object.</p>
+
+<dl class="api">
+<dt><code>int tcrdbqrysearchcount(RDBQRY *<var>qry</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+<dd>The return value is the count of corresponding records or 0 on failure.</dd>
+</dl>
+
+<p>The function `tcrdbqryhint' is used in order to get the hint string of a query object.</p>
+
+<dl class="api">
+<dt><code>const char *tcrdbqryhint(RDBQRY *<var>qry</var>);</code></dt>
+<dd>`<var>qry</var>' specifies the query object.</dd>
+<dd>The return value is the hint string.</dd>
+<dd>This function should be called after the query execution by `tcrdbqrysearch' and so on.  The region of the return value is overwritten when this function is called again.</dd>
+</dl>
+
+<p>The function `tcrdbmetasearch' is used in order to retrieve records with multiple query objects and get the set of the result.</p>
+
+<dl class="api">
+<dt><code>TCLIST *tcrdbmetasearch(RDBQRY **<var>qrys</var>, int <var>num</var>, int <var>type</var>);</code></dt>
+<dd>`<var>qrys</var>' specifies an array of the query objects.</dd>
+<dd>`<var>num</var>' specifies the number of elements of the array.</dd>
+<dd>`<var>type</var>' specifies a set operation type: `RDBMSUNION' for the union set, `RDBMSISECT' for the intersection set, `RDBMSDIFF' for the difference set.</dd>
+<dd>The return value is a list object of the primary keys of the corresponding records.  This function does never fail.  It returns an empty list even if no record corresponds.</dd>
+<dd>If the first query object has the order setting, the result array is sorted by the order.  Because the object of the return value is created with the function `tclistnew', it should be deleted with the function `tclistdel' when it is no longer in use.</dd>
+</dl>
+
+<p>The function `tcrdbparasearch' is used in order to search records for multiple servers in parallel.</p>
+
+<dl class="api">
+<dt><code>TCLIST *tcrdbparasearch(RDBQRY **<var>qrys</var>, int <var>num</var>);</code></dt>
+<dd>`<var>qrys</var>' specifies an array of the query objects.</dd>
+<dd>`<var>num</var>' specifies the number of elements of the array.</dd>
+<dd>The return value is a list object of zero separated columns of the corresponding records.</dd>
+<dd>This function does never fail.  It returns an empty list even if no record corresponds.  Each element of the list can be treated with the function `tcrdbqryrescols'.  Because the object of the return value is created with the function `tclistnew', it should be deleted with the function `tclistdel' when it is no longer in use.</dd>
+</dl>
+
+<h3 id="tcrdbapi_example">Example Code</h3>
+
+<p>The following code is an example to use a remote database.</p>
+
+<pre>#include &lt;tcrdb.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;stdbool.h&gt;
+#include &lt;stdint.h&gt;
+
+int main(int argc, char **argv){
+
+  TCRDB *rdb;
+  int ecode;
+  char *value;
+
+  /* create the object */
+  rdb = tcrdbnew();
+
+  /* connect to the server */
+  if(!tcrdbopen(rdb, "localhost", 1978)){
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "open error: %s\n", tcrdberrmsg(ecode));
+  }
+
+  /* store records */
+  if(!tcrdbput2(rdb, "foo", "hop") ||
+     !tcrdbput2(rdb, "bar", "step") ||
+     !tcrdbput2(rdb, "baz", "jump")){
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "put error: %s\n", tcrdberrmsg(ecode));
+  }
+
+  /* retrieve records */
+  value = tcrdbget2(rdb, "foo");
+  if(value){
+    printf("%s\n", value);
+    free(value);
+  } else {
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "get error: %s\n", tcrdberrmsg(ecode));
+  }
+
+  /* close the connection */
+  if(!tcrdbclose(rdb)){
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "close error: %s\n", tcrdberrmsg(ecode));
+  }
+
+  /* delete the object */
+  tcrdbdel(rdb);
+
+  return 0;
+}
+</pre>
+
+<p>The following code is an example to use a remote database with the table extension.</p>
+
+<pre>#include &lt;tcrdb.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;stdbool.h&gt;
+#include &lt;stdint.h&gt;
+
+int main(int argc, char **argv){
+
+  TCRDB *rdb;
+  int ecode, pksiz, i, rsiz;
+  char pkbuf[256];
+  const char *rbuf, *name;
+  TCMAP *cols;
+  RDBQRY *qry;
+  TCLIST *res;
+
+  /* create the object */
+  rdb = tcrdbnew();
+
+  /* connect to the server */
+  if(!tcrdbopen(rdb, "localhost", 1978)){
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "open error: %s\n", tcrdberrmsg(ecode));
+  }
+
+  /* store a record */
+  pksiz = sprintf(pkbuf, "%ld", (long)tcrdbtblgenuid(rdb));
+  cols = tcmapnew3("name", "mikio", "age", "30", "lang", "ja,en,c", NULL);
+  if(!tcrdbtblput(rdb, pkbuf, pksiz, cols)){
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "put error: %s\n", tcrdberrmsg(ecode));
+  }
+  tcmapdel(cols);
+
+  /* store a record in a naive way */
+  pksiz = sprintf(pkbuf, "12345");
+  cols = tcmapnew();
+  tcmapput2(cols, "name", "falcon");
+  tcmapput2(cols, "age", "31");
+  tcmapput2(cols, "lang", "ja");
+  if(!tcrdbtblput(rdb, pkbuf, pksiz, cols)){
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "put error: %s\n", tcrdberrmsg(ecode));
+  }
+  tcmapdel(cols);
+
+  /* search for records */
+  qry = tcrdbqrynew(rdb);
+  tcrdbqryaddcond(qry, "age", RDBQCNUMGE, "20");
+  tcrdbqryaddcond(qry, "lang", RDBQCSTROR, "ja,en");
+  tcrdbqrysetorder(qry, "name", RDBQOSTRASC);
+  tcrdbqrysetlimit(qry, 10, 0);
+  res = tcrdbqrysearch(qry);
+  for(i = 0; i &lt; tclistnum(res); i++){
+    rbuf = tclistval(res, i, &amp;rsiz);
+    cols = tcrdbtblget(rdb, rbuf, rsiz);
+    if(cols){
+      printf("%s", rbuf);
+      tcmapiterinit(cols);
+      while((name = tcmapiternext2(cols)) != NULL){
+        printf("\t%s\t%s", name, tcmapget2(cols, name));
+      }
+      printf("\n");
+      tcmapdel(cols);
+    }
+  }
+  tclistdel(res);
+  tcrdbqrydel(qry);
+
+  /* close the connection */
+  if(!tcrdbclose(rdb)){
+    ecode = tcrdbecode(rdb);
+    fprintf(stderr, "close error: %s\n", tcrdberrmsg(ecode));
+  }
+
+  /* delete the object */
+  tcrdbdel(rdb);
+
+  return 0;
+}
+</pre>
+
+<h3 id="tcrdbapi_uselib">How to Use the Library</h3>
+
+<p>The API of C is available by programs conforming to the C89 (ANSI C) standard or the C99 standard.  As the header files of Tokyo Tyrant are provided as `<code>tcrdb.h</code>', applications should include it to use the API.  As the library is provided as `<code>libtokyotyrant.a</code>' and `<code>libtokyotyrant.so</code>' and they depend on `<code>libtokyocabinet.so</code>', `<code>libz.so</code>', `<code>libbz2.so</code>', `<code>libresolv.so</code>', `<code>libnsl.so</code>', `<code>libdl.so</code>', `<code>librt.so</code>', `<code>libpthread.so</code>', `<code>libm.so</code>', and `<code>libc.so</code>', linker options corresponding to them are required by the build command.  The typical build command is the following.</p>
+
+<pre>gcc -I/usr/local/include tt_example.c -o tt_example \
+  -L/usr/local/lib -ltokyotyrant -ltokyocabinet -lz -lbz2 \
+  -lresolv -lnsl -ldl -lrt -lpthread -lm -lc
+</pre>
+
+<p>You can also use Tokyo Tyrant in programs written in C++.  Because each header is wrapped in C linkage (`<code>extern "C"</code>' block), you can simply include them into your C++ programs.</p>
+
+<hr />
+
+<h2 id="luaext">Lua Extension</h2>
+
+<p>The database server can starts reading a Lua script file by the `<code>-ext</code>' option.  Clients can call functions defined in the script file by the `<code>tcrdbext</code>' function of the remote database API.</p>
+
+<h3 id="luaext_userfunc">User-defined Functions</h3>
+
+<p>You can define some arbitrary functions in the script file.  Each function receives two string parameters of the key and the value.  The return value is sent back to the client.  If the function returns `nil', the server send the error code to the client.</p>
+
+<p>Two kinds of locking options are provided to `<code>tcrdbext</code>'.  One is global locking which means that only one thread can operate the function at the same time.  The other is record locking which means that only one thread can operate the record of the specified key at the same time.</p>
+
+<p>Note that instances of Lua interpreter are handled separately by each native thread. Because global variables of Lua are not useful to share some data among native threads or sessions, shared data should be handled in the database or by the stash functions.</p>
+
+<h3 id="luaext_builtinfunc">Built-in Functions</h3>
+
+<p>The following build-in functions for database operations are available in user defined functions.  The type of `key' and `value' parameters should be string or number.  If number is given, it is converted as decimal string.</p>
+
+<dl>
+<dt><code>_eval(<var>chunk</var>)</code></dt>
+<dd>Evaluate a Lua chunk in each native thread.</dd>
+<dd>`<var>chunk</var>' specifies the Lua chunk string.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_log(<var>message</var>, <var>level</var>)</code></dt>
+<dd>Print a message into the server log.</dd>
+<dd>`<var>message</var>' specifies the message string.</dd>
+<dd>`<var>level</var>' specifies the log level; 0 for debug, 1 for information, 2 for error, 3 for system.  It can be omitted and the default value is 1.</dd>
+<dt><code>_put(<var>key</var>, <var>value</var>)</code></dt>
+<dd>Store a record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>`<var>value</var>' specifies the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_putkeep(<var>key</var>, <var>value</var>)</code></dt>
+<dd>Store a new record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>`<var>value</var>' specifies the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_putcat(<var>key</var>, <var>value</var>)</code></dt>
+<dd>Concatenate a value at the end of the existing record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>`<var>value</var>' specifies the value.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_out(<var>key</var>)</code></dt>
+<dd>Remove a record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_get(<var>key</var>)</code></dt>
+<dd>Retrieve a record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>If successful, the return value is the value of the corresponding record.  `nil' is returned if no record corresponds.</dd>
+<dt><code>_vsiz(<var>key</var>)</code></dt>
+<dd>Get the size of the value of a record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>If successful, the return value is the size of the value of the corresponding record, else, it is -1.</dd>
+<dt><code>_iterinit()</code></dt>
+<dd>Initialize the iterator.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_iternext()</code></dt>
+<dd>Get the next key of the iterator.</dd>
+<dd>If successful, the return value is the next key, else, it is `nil'.  `nil' is returned when no record is to be get out of the iterator.</dd>
+<dt><code>_fwmkeys(<var>prefix</var>, <var>max</var>)</code></dt>
+<dd>Get forward matching keys.</dd>
+<dd>The return value an array of the keys of the corresponding records.  This function does never fail.  It returns an empty array even if no record corresponds.</dd>
+<dt><code>_addint(<var>key</var>, <var>value</var>)</code></dt>
+<dd>Add an integer to a record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>`<var>value</var>' specifies the value.</dd>
+<dd>If successful, the return value is the summation value, else, it is `nil'.</dd>
+<dt><code>_adddouble(<var>key</var>, <var>value</var>)</code></dt>
+<dd>Add a real number to a record.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>`<var>value</var>' specifies the value.</dd>
+<dd>If successful, the return value is the summation value, else, it is `nil'.</dd>
+<dt><code>_vanish()</code></dt>
+<dd>Remove all records.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_rnum()</code></dt>
+<dd>Get the number of records.</dd>
+<dd>The return value is the number of records.</dd>
+<dt><code>_size()</code></dt>
+<dd>Get the size of the database file.</dd>
+<dd>The return value is the size of the database file.</dd>
+<dt><code>_misc(<var>name</var>, <var>args</var>, ...)</code></dt>
+<dd>Call a versatile function for miscellaneous operations.</dd>
+<dd>`<var>name</var>' specifies the name of the function.  If it begins with "$", the update log is omitted.</dd>
+<dd>`<var>args</var>' specifies an array of arguments.</dd>
+<dd>If successful, the return value is an array of the result.  `nil' is returned on failure.</dd>
+<dt><code>_foreach(<var>func</var>)</code></dt>
+<dd>Process each record atomically.</dd>
+<dd>`<var>func</var>' the iterator function called for each record.  It receives two parameters of the key and the value, and returns true to continue iteration or false to stop iteration.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_mapreduce(<var>mapper</var>, <var>reducer</var>, <var>keys</var>)</code></dt>
+<dd>Perform operations based on MapReduce.</dd>
+<dd>`<var>mapper</var>' specifies the mapper function.  It is called for each target record and receives the key, the value, and the function to emit the mapped records.  The emitter function receives a key and a value.  The mapper function should return true normally or false on failure.</dd>
+<dd>`<var>reducer</var>' specifies the reducer function.  It is called for each record generated by sorting emitted records by keys, and receives the key and an array of values.  The reducer function should return true normally or false on failure.</dd>
+<dd>`<var>keys</var>' specifies the keys of target records.  If it is not defined, every record in the database is processed.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_stashput(<var>key</var>, <var>value</var>)</code></dt>
+<dd>Store a record into the stash.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>`<var>value</var>' specifies the value.</dd>
+<dd>The return value is always true.</dd>
+<dt><code>_stashout(<var>key</var>)</code></dt>
+<dd>Remove a record from the stash.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_stashget(<var>key</var>)</code></dt>
+<dd>Retrieve a record in the stash.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>If successful, the return value is the value of the corresponding record.  `nil' is returned if no record corresponds.</dd>
+<dt><code>_stashvanish()</code></dt>
+<dd>Remove all records of the stash.</dd>
+<dt><code>_stashforeach(<var>func</var>)</code></dt>
+<dd>Process each record atomically of the stash.</dd>
+<dd>`<var>func</var>' the iterator function called for each record.  It receives two parameters of the key and the value, and returns true to continue iteration or false to stop iteration.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_lock(<var>key</var>)</code></dt>
+<dd>Lock an arbitrary key.</dd>
+<dd>`<var>key</var>' specifies the key.  The locked key should be unlocked in the same operation.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_unlock(<var>key</var>)</code></dt>
+<dd>Unock an arbitrary key.</dd>
+<dd>`<var>key</var>' specifies the key.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_pack(<var>format</var>, <var>ary</var>, ...)</code></dt>
+<dd>Serialize an array of numbers into a string.</dd>
+<dd>`<var>format</var>' specifies the format string.  It should be composed of conversion characters; `c' for int8_t, `C' for uint8_t, `s' for int16_t, `S' for uint16_t, `i' for int32_t, `I' for uint32_t, `l' for int64_t, `L' for uint64_t, `f' for float, `d' for double, `n' for uint16_t in network byte order, `N' for uint32_t in network byte order, `M' for uint64_t in network byte order, and `w' for BER encoding.  They can be trailed by a numeric expression standing for the iteration count or by `*' for the rest all iteration.</dd>
+<dd>`<var>ary</var>' specifies the array of numbers.</dd>
+<dd>The return value is the serialized string.</dd>
+<dt><code>_unpack(<var>format</var>, <var>str</var>)</code></dt>
+<dd>Deserialize a binary string into an array of numbers.</dd>
+<dd>`<var>format</var>' specifies the format string.  It should be composed of conversion characters as with `_pack'.</dd>
+<dd>`<var>str</var>' specifies the binary string.</dd>
+<dd>The return value is the deserialized array.</dd>
+<dt><code>_split(<var>str</var>, <var>delims</var>)</code></dt>
+<dd>Split a string into substrings.</dd>
+<dd>`<var>str</var>' specifies the string.</dd>
+<dd>`<var>delims</var>' specifies a string including separator characters.  If it is not defined, the zero code is specified.</dd>
+<dd>The return value is an array of substrings.</dd>
+<dt><code>_codec(<var>mode</var>, <var>str</var>)</code></dt>
+<dd>Encode or decode a string.</dd>
+<dd>`<var>mode</var>' specifies the encoding method; "url" for URL encoding, "~url" for URL decoding, "base" for Base64 encoding, "~base" for Base64 decoding, "hex" for hexadecimal encoding, "~hex" for hexadecimal decoding, "pack" for PackBits encoding, "~pack" for PackBits decoding, "tcbs" for TCBS encoding, "~tcbs" for TCBS decoding, "deflate" for Deflate encoding, "~deflate" for Deflate decoding, "gzip" for GZIP encoding, "~gzip" for GZIP decoding, "bzip" for BZIP2 encoding, "~bzip" for BZIP2 decoding, "xml" for XML escaping, "~xml" for XML unescaping.</dd>
+<dd>`<var>str</var>' specifies the string.</dd>
+<dd>The return value is the encoded or decoded string.</dd>
+<dt><code>_hash(<var>mode</var>, <var>str</var>)</code></dt>
+<dd>Get the hash value of a string.</dd>
+<dd>`<var>mode</var>' specifies the hash method; "md5" for MD5 in hexadecimal format, "md5raw" for MD5 in raw format, "crc32" for CRC32 checksum number.</dd>
+<dd>`<var>str</var>' specifies the string.</dd>
+<dd>The return value is the hash value.</dd>
+<dt><code>_bit(<var>mode</var>, <var>num</var>, <var>aux</var>)</code></dt>
+<dd>Perform bit operation of an integer.</dd>
+<dd>`<var>mode</var>' specifies the operator; "and" for bitwise-and operation, "or" for bitwise-or operation, "xor" for bitwise-xor operation, "not" for bitwise-not operation, "left" for left shift operation, "right" for right shift operation.</dd>
+<dd>`<var>num</var>' specifies the integer, which is treated as a 32-bit unsigned integer.</dd>
+<dd>`<var>aux</var>' specifies the auxiliary operand for some operators.</dd>
+<dd>The return value is the result value.</dd>
+<dt><code>_strstr(<var>str</var>, <var>pattern</var>, <var>alt</var>)</code></dt>
+<dd>Perform substring matching or replacement without evaluating any meta character.</dd>
+<dd>`<var>str</var>' specifies the source string.</dd>
+<dd>`<var>pattern</var>' specifies the matching pattern.</dd>
+<dd>`<var>alt</var>' specifies the alternative string corresponding for the pattern.  If it is not defined, matching check is performed.</dd>
+<dd>If the alternative string is specified, the converted string is returned.  If the alternative string is not specified, the index of the substring matching the given pattern or 0 is returned.</dd>
+<dt><code>_regex(<var>str</var>, <var>pattern</var>, <var>alt</var>)</code></dt>
+<dd>Perform pattern matching or replacement with regular expressions.</dd>
+<dd>`<var>str</var>' specifies the source string.</dd>
+<dd>`<var>pattern</var>' specifies the pattern of regular expressions.</dd>
+<dd>`<var>alt</var>' specifies the alternative string corresponding for the pattern.  If it is not defined, matching check is performed.</dd>
+<dd>If the alternative string is specified, the converted string is returned.  If the alternative string is not specified, the boolean value of whether the source string matches the pattern is returned.</dd>
+<dt><code>_ucs(<var>data</var>)</code></dt>
+<dd>Convert a UTF-8 string into a UCS-2 array or its inverse.</dd>
+<dd>`<var>data</var>' specifies the target data.  If it is a string, convert it into a UCS-array.  If it is an array, convert it into a UTF-8 string.</dd>
+<dd>The return value is the result data.</dd>
+<dt><code>_dist(<var>astr</var>, <var>bstr</var>, <var>isutf</var>)</code></dt>
+<dd>Calculate the edit distance of two UTF-8 strings.</dd>
+<dd>`<var>astr</var>' specifies a string.</dd>
+<dd>`<var>bstr</var>' specifies the other string.</dd>
+<dd>`<var>isutf</var>' specifies whether to calculate cost by Unicode character.  If it is not defined, false is specified and calculate cost by ASCII character.</dd>
+<dd>The return value is the edit distance which is known as the Levenshtein distance.</dd>
+<dt><code>_isect(ary, ...)</code></dt>
+<dd>Calculate the intersection set of arrays.</dd>
+<dd>`<var>ary</var>' specifies the arrays.  Arbitrary number of arrays can be specified as the parameter list.</dd>
+<dd>The return value is the array of the intersection set.</dd>
+<dt><code>_union(ary, ...)</code></dt>
+<dd>Calculate the union set of arrays.</dd>
+<dd>`<var>ary</var>' specifies the arrays.  Arbitrary number of arrays can be specified as the parameter list.</dd>
+<dd>The return value is the array of the union set.</dd>
+<dt><code>_time()</code></dt>
+<dd>Get the time of day in seconds.</dd>
+<dd>The return value is the time of day in seconds.  The accuracy is in microseconds.</dd>
+<dt><code>_sleep(<var>sec</var>)</code></dt>
+<dd>Suspend execution for the specified interval.</dd>
+<dd>`<var>sec</var>' specifies the interval in seconds.</dd>
+<dd>If successful, the return value is true, else, it is false.</dd>
+<dt><code>_stat(<var>path</var>)</code></dt>
+<dd>Get the status of a file.</dd>
+<dd>`<var>path</var>' specifies the path of the file.</dd>
+<dd>If successful, the return value is a table containing status, else, it is `nil'.  There are keys of status name; "dev", "ino", "mode", "nlink", "uid", "gid", "rdev", "size", "blksize", "blocks", "atime", "mtime", "ctime", which have same meanings of the POSIX "stat" call.  Additionally, "_regular" for whether the file is a regular file, "_directory" for whether the file is a directory, "_readable" for whether the file is readable by the process, "_writable" for whether the file is writable by the process, "_executable" for whether the file is executable by the process, "_realpath" for the real path of the file, are supported.</dd>
+<dt><code>_glob(<var>pattern</var>)</code></dt>
+<dd>Find pathnames matching a pattern.</dd>
+<dd>`<var>pattern</var>' specifies the matching pattern.  "?" and "*" are meta characters.</dd>
+<dd>The return value is an array of matched paths.  If no path is matched, an empty array is returned.</dd>
+<dt><code>_remove(<var>path</var>)</code></dt>
+<dd>Remove a file or a directory and its sub ones recursively.</dd>
+<dd>`<var>path</var>' specifies the path of the link.</dd>
+<dd>If successful, it is true, else, it is false.</dd>
+<dt><code>_mkdir(<var>path</var>)</code></dt>
+<dd>Create a directory.</dd>
+<dd>`<var>path</var>' specifies the path of the directory.</dd>
+<dd>If successful, it is true, else, it is false.</dd>
+</dl>
+
+<p>Built-in functions, whose names start with "_", cannot be called directly by clients.  When the server starts, the function `<code>_begin</code>' is called implicitly if it has been defined.  When the server starts, the function `<code>_end</code>' is called implicitly if it has been defined.</p>
+
+<p>The global variable `<code>_version</code>' contains the version information of the server.  The global variable `<code>_pid</code>' contains the process ID.  The global variable `<code>_sid</code>' contains the server ID.  The global variable `<code>_thnum</code>' contains the number of native threads.  The global variable `<code>_thid</code>' contains the ID number of each native thread.</p>
+
+<h3 id="luaext_example">Example Code</h3>
+
+<p>The following code is an example to increment the record value and store as a decimal number string.  This function should be called with the record locking option to ensure atomicity.</p>
+
+<pre>function incr(key, value)
+   value = tonumber(value)
+   if not value then
+      return nil
+   end
+   local old = tonumber(_get(key))
+   if old then
+      value = value + old
+   end
+   if not _put(key, value) then
+      return nil
+   end
+   return value
+end
+</pre>
+
+<hr />
+
+<h2 id="protocol">Protocol</h2>
+
+<p>The protocol between the server and clients stands on TCP/IP.  By default, the service port is bound to every address of the local host and the port number is 1978.  Each session of the server and a client is composed of a request and a response.  The server speaks three protocols at the same port.</p>
+
+<h3 id="protocol_binary">Original Binary Protocol</h3>
+
+<p>In the original binary protocol, requests are classified into the following commands.  Structure of request and response is determined by the command.  The byte order of integer in request and response is big endian.</p>
+
+<dl class="api">
+<dt><code>put</code>: for the function `tcrdbput'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][vsiz:4][kbuf:*][vbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x10</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 32-bit integer standing for the length of the value</dd>
+<dd>Arbitrary data of the key</dd>
+<dd>Arbitrary data of the value</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>putkeep</code>: for the function `tcrdbputkeep'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][vsiz:4][kbuf:*][vbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x11</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 32-bit integer standing for the length of the value</dd>
+<dd>Arbitrary data of the key</dd>
+<dd>Arbitrary data of the value</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>putcat</code>: for the function `tcrdbputcat'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][vsiz:4][kbuf:*][vbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x12</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 32-bit integer standing for the length of the value</dd>
+<dd>Arbitrary data of the key</dd>
+<dd>Arbitrary data of the value</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>putshl</code>: for the function `tcrdbputshl'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][vsiz:4][width:4][kbuf:*][vbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x13</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 32-bit integer standing for the length of the value</dd>
+<dd>A 32-bit integer standing for the width</dd>
+<dd>Arbitrary data of the key</dd>
+<dd>Arbitrary data of the value</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>putnr</code>: for the function `tcrdbputnr'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][vsiz:4][kbuf:*][vbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x18</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 32-bit integer standing for the length of the value</dd>
+<dd>Arbitrary data of the key</dd>
+<dd>Arbitrary data of the value</dd>
+<dt>Response: (none)</dt>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>out</code>: for the function `tcrdbout'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][kbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x20</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>Arbitrary data of the key</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>get</code>: for the function `tcrdbget'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][kbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x30</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>Arbitrary data of the key</dd>
+<dt>Response: <code>[code:1]([vsiz:4][vbuf:*])</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>on success: A 32-bit integer standing for the length of the value</dd>
+<dd>on success: Arbitrary data of the value</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>mget</code>: for the function `tcrdbget3'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][rnum:4][{[ksiz:4][kbuf:*]}:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x31</dd>
+<dd>A 32-bit integer standing for the number of keys</dd>
+<dd>iteration: A 32-bit integer standing for the length of the key</dd>
+<dd>iteration: Arbitrary data of the key</dd>
+<dt>Response: <code>[code:1][rnum:4][{[ksiz:4][vsiz:4][kbuf:*][vbuf:*]}:*]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>A 32-bit integer standing for the number of records</dd>
+<dd>iteration: A 32-bit integer standing for the length of the key</dd>
+<dd>iteration: A 32-bit integer standing for the length of the value</dd>
+<dd>iteration: Arbitrary data of the key</dd>
+<dd>iteration: Arbitrary data of the value</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>vsiz</code>: for the function `tcrdbvsiz'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][kbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x38</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>Arbitrary data of the key</dd>
+<dt>Response: <code>[code:1]([vsiz:4])</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>on success: A 32-bit integer standing for the length of the value</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>iterinit</code>: for the function `tcrdbiterinit'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x50</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>iternext</code>: for the function `tcrdbiternext'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x51</dd>
+<dt>Response: <code>[code:1]([ksiz:4][kbuf:*])</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>on success: A 32-bit integer standing for the length of the key</dd>
+<dd>on success: Arbitrary data of the key</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>fwmkeys</code>: for the function `tcrdbfwmkeys'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][psiz:4][max:4][pbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x58</dd>
+<dd>A 32-bit integer standing for the length of the prefix</dd>
+<dd>A 32-bit integer standing for the maximum number of keys to be fetched</dd>
+<dd>Arbitrary data of the prefix</dd>
+<dt>Response: <code>[code:1][knum:4][{[ksiz:4][kbuf:*]}:*]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>A 32-bit integer standing for the number of keys</dd>
+<dd>iteration: A 32-bit integer standing for the length of the key</dd>
+<dd>iteration: Arbitrary data of the key</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>addint</code>: for the function `tcrdbaddint'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][num:4][kbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x60</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 32-bit integer standing for the additional number</dd>
+<dd>Arbitrary data of the key</dd>
+<dt>Response: <code>[code:1]([sum:4])</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>on success: A 32-bit integer standing for the summation value</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>adddouble</code>: for the function `tcrdbadddouble'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][ksiz:4][integ:8][fract:8][kbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x61</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 64-bit integer standing for the integral of the additional number</dd>
+<dd>A 64-bit integer standing for the trillionfold fractional of the additional number</dd>
+<dd>Arbitrary data of the key</dd>
+<dt>Response: <code>[code:1]([integ:8][fract:8])</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>on success: A 64-bit integer standing for the integral of the summation value</dd>
+<dd>on success: A 64-bit integer standing for the trillionfold fractional of the summation value</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>ext</code>: for the function `tcrdbext'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][nsiz:4][opts:4][ksiz:4][vsiz:4][nbuf:*][kbuf:*][vbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x68</dd>
+<dd>A 32-bit integer standing for the length of the function name</dd>
+<dd>A 32-bit integer standing for the options</dd>
+<dd>A 32-bit integer standing for the length of the key</dd>
+<dd>A 32-bit integer standing for the length of the value</dd>
+<dd>Arbitrary data of the function name</dd>
+<dd>Arbitrary data of the key</dd>
+<dd>Arbitrary data of the value</dd>
+<dt>Response: <code>[code:1]([rsiz:4][rbuf:*])</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>on success: A 32-bit integer standing for the length of the result</dd>
+<dd>on success: Arbitrary data of the result</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>sync</code>: for the function `tcrdbsync'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x70</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>optimize</code>: for the function `tcrdboptimize'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][psiz:4][pbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x71</dd>
+<dd>A 32-bit integer standing for the length of the parameter string</dd>
+<dd>Arbitrary data of the parameter string</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>vanish</code>: for the function `tcrdbvanish'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x72</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>copy</code>: for the function `tcrdbcopy'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][psiz:4][pbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x73</dd>
+<dd>A 32-bit integer standing for the length of the path</dd>
+<dd>Arbitrary data of the path</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>restore</code>: for the function `tcrdbrestore'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][psiz:4][ts:8][opts:4][pbuf:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x74</dd>
+<dd>A 32-bit integer standing for the length of the path</dd>
+<dd>A 64-bit integer standing for the beginning time stamp in microseconds</dd>
+<dd>A 32-bit integer standing for the options</dd>
+<dd>Arbitrary data of the path</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>setmst</code>: for the function `tcrdbsetmst'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][hsiz:4][port:4][ts:8][opts:4][host:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x78</dd>
+<dd>A 32-bit integer standing for the length of the host name</dd>
+<dd>A 32-bit integer standing for the port number</dd>
+<dd>A 64-bit integer standing for the beginning time stamp in microseconds</dd>
+<dd>A 32-bit integer standing for the options</dd>
+<dd>Arbitrary data of the host name</dd>
+<dt>Response: <code>[code:1]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>rnum</code>: for the function `tcrdbrnum'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x80</dd>
+<dt>Response: <code>[code:1][rnum:8]</code></dt>
+<dd>An 8-bit integer whose value is always 0</dd>
+<dd>A 64-bit integer standing for the number of records</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>size</code>: for the function `tcrdbsize'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x81</dd>
+<dt>Response: <code>[code:1][rnum:8]</code></dt>
+<dd>An 8-bit integer whose value is always 0</dd>
+<dd>A 64-bit integer standing for the size of the database</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>stat</code>: for the function `tcrdbstat'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x88</dd>
+<dt>Response: <code>[code:1][ssiz:4][sbuf:*]</code></dt>
+<dd>An 8-bit integer whose value is always 0</dd>
+<dd>A 32-bit integer standing for the length of the status message</dd>
+<dd>Arbitrary data of the result</dd>
+</dl></dd>
+</dl>
+
+<dl class="api">
+<dt><code>misc</code>: for the function `tcrdbmisc'</dt>
+<dd><dl>
+<dt>Request: <code>[magic:2][nsiz:4][opts:4][rnum:4][nbuf:*][{[asiz:4][abuf:*]}:*]</code></dt>
+<dd>Two bytes of the command ID: 0xC8 and 0x90</dd>
+<dd>A 32-bit integer standing for the length of the function name</dd>
+<dd>A 32-bit integer standing for the options</dd>
+<dd>A 32-bit integer standing for the number of arguments</dd>
+<dd>Arbitrary data of the function name</dd>
+<dd>iteration: A 32-bit integer standing for the length of the argument</dd>
+<dd>iteration: Arbitrary data of the argument</dd>
+<dt>Response: <code>[code:1][rnum:4][{[esiz:4][ebuf:*]}:*]</code></dt>
+<dd>An 8-bit integer whose value is 0 on success or another on failure</dd>
+<dd>A 32-bit integer standing for the number of result elements</dd>
+<dd>iteration: A 32-bit integer standing for the length of the element</dd>
+<dd>iteration: Arbitrary data of the element</dd>
+</dl></dd>
+</dl>
+
+<p>To finish the session, the client can shutdown and close the socket at any time.  If not closed, the connection can be reused for the next session.  If protocol violation or some fatal error occurs, the server immediately breaks the session and closes the connection.</p>
+
+<h3 id="protocol_memcached">Memcached Compatible Protocol</h3>
+
+<p>As for the memcached (ASCII) compatible protocol, the server implements the following commands; "set", "add", "replace", "get", "delete", "incr", "decr", "stats", "flush_all", "version", and "quit".  "noreply" options of update commands are also supported.  However, "flags", "exptime", and "cas unique" parameters are ignored.</p>
+
+<h3 id="protocol_http">HTTP Compatible Protocol</h3>
+
+<p>As for the HTTP (1.1) compatible protocol, the server implements the following commands; "GET" (relevant to `tcrdbget'), "HEAD" (relevant to `tcrdbvsiz'), "PUT" (relevant to `tcrdbput'), "POST" (relevant to `tcrdbext'), "DELETE" (relevant to `tcrdbout'), and "OPTIONS" (relevant to `tcrdbstat').  The URI of each request is treated as the key encoded by the URL encoding.  And the entity body is treated as the value.  However, headers except for "Connection" and "Content-Length" are ignored.  "PUT" can have the header "X-TT-PDMODE" whose value is either of 1 (relevant to `tcrdbputkeep'), 2 (relevant to `tcrdbputcat'), or else (relevant to `tcrdbput').</p>
+
+<p>"POST" should have one of the header "X-TT-XNAME" or the header "X-TT-MNAME".  "X-TT-XNAME" is relevant to `tcrdbext' and specifies the function name.  The header "X-TT-XOPTS" stands for bitwise-or options of 1 (record locking) and 2 (global locking).  The URI of each request is treated as the key encoded by the URL encoding.  And the entity body is treated as the value.  The result is expressed as the entity body of the response.  "X-TT-MNAME" is relevant to `tcrdbmisc' and specifies the function name.  The header "X-TT-MOPTS" stands for bitwise-or options of 1 (omission of the update log).  The request parameters are expressed as the entity body in the "application/x-www-form-urlencoded" format.  The names are ignored and the values are treated as a list of the parameters.  The result is expressed as the entity body of the response in the "application/x-www-form-urlencoded" format.</p>
+
+<hr />
+
+<h2 id="tutorial">Tutorial</h2>
+
+<h3 id="tutorial_basic">Basic Use</h3>
+
+<p>After installation of Tokyo Tyrant, you can start the server immediately by executing the command `<code>ttserver</code>' in the terminal.  By default, the server listens to the port 1978 and serves as the accessor of an on-memory hash database, which is useful to store cache data.</p>
+
+<pre>[terminal-1]$ ttserver
+</pre>
+
+<p>To test storing operations, execute the following commands in another terminal.  `<code>tcrmgr put</code>' calls the function `<code>tcrdbput</code>'.</p>
+
+<pre>[terminal-2]$ tcrmgr put localhost one first
+[terminal-2]$ tcrmgr put localhost two second
+[terminal-2]$ tcrmgr put localhost three third
+</pre>
+
+<p>To test retrieving operations, execute the following commands in another terminal.  `<code>tcrmgr get</code>' calls the function `<code>tcrdbget</code>'.</p>
+
+<pre>[terminal-2]$ tcrmgr get localhost one
+[terminal-2]$ tcrmgr get localhost two
+[terminal-2]$ tcrmgr get localhost three
+</pre>
+
+<p>To retrieve multiple records at once, execute the following command.  `<code>tcrmgr mget</code>' calls the function `<code>tcrdbget3</code>'.</p>
+
+<pre>[terminal-2]$ tcrmgr mget localhost one two three
+</pre>
+
+<p>To terminate the server, input Ctrl-C in the terminal of the server.</p>
+
+<p>Next, let's run the server that handles a hash database, by specifying the file name whose suffix is `<code>.tch</code>'.</p>
+
+<pre>[terminal-1]$ ttserver casket.tch
+</pre>
+
+<p>Store some records.</p>
+
+<pre>[terminal-2]$ tcrmgr put localhost one first
+[terminal-2]$ tcrmgr put localhost two second
+[terminal-2]$ tcrmgr put localhost three third
+</pre>
+
+<p>Terminate the server by Ctrl-C, and then restart the server.</p>
+
+<pre>[terminal-1]$ ttserver casket.tch
+</pre>
+
+<p>Check consistency of stored records.</p>
+
+<pre>[terminal-2]$ tcrmgr mget localhost one two three
+</pre>
+
+<p>Terminate the server by Ctrl-C and remove the database, for the successive tutorial.</p>
+
+<pre>[terminal-1]$ rm casket.tch
+</pre>
+
+<h3 id="tutorial_daemon">Daemon</h3>
+
+<p>To run the server as a daemon process, specify the option `<code>-dmn</code>'.  Moreover, the option `<code>-pid</code>' should be specified to record the process ID into a file.  Note that the current directory of the daemon process is changed to the root directory.  So, the file path parameter should be expressed as the absolute path.</p>
+
+<pre>[terminal-1]$ ttserver -dmn -pid /tmp/ttserver.pid /tmp/casket.tch
+</pre>
+
+<p>To terminate the daemonized server, check the process ID from the file specified by `<code>-pid</code>' and send the SIGTERM signal to the process.</p>
+
+<pre>[terminal-1]$ kill -TERM `cat /tmp/ttserver.pid`
+</pre>
+
+<p>To run the server by the RC script of the operating system, use `<code>ttservctl</code>'.  As for most Linux distribution, append the following line to `<code>/etc/rc.local</code>'.</p>
+
+<pre>/usr/local/sbin/ttservctl start
+</pre>
+
+<p>By default, the database file and the related files are placed under `<code>/var/ttserver</code>'.  Because `<code>ttservctl</code>' is a tiny shell script, copy and edit it for your purpose.  Also, it is suitable to install the modified script into `<code>/etc/init.d</code>' and set symbolic links from `<code>/etc/rc3.d/S98ttserver</code>' and `<code>/etc/rc5.d/S98ttserver</code>'.</p>
+
+<h3 id="tutorial_backup">Backup and Recovery</h3>
+
+<p>Let's run the server again to continue this tutorial.</p>
+
+<pre>[terminal-1]$ ttserver casket.tch
+</pre>
+
+<p>Store some records.</p>
+
+<pre>[terminal-2]$ tcrmgr put localhost one first
+[terminal-2]$ tcrmgr put localhost two second
+[terminal-2]$ tcrmgr put localhost three third
+</pre>
+
+<p>To back up the database file, indicate the destination path to the server by the command `<code>tcrmgr copy</code>'.  Note that the backup file is created on the local file system of the server (not on the client side).</p>
+
+<pre>[terminal-2]$ tcrmgr copy localhost backup.tch
+</pre>
+
+<p>Terminate the server by Ctrl-C and remove the database.</p>
+
+<pre>[terminal-1]$ rm casket.tch
+</pre>
+
+<p>Recover the database from the backup file and restart the server.</p>
+
+<pre>[terminal-1]$ cp backup.tch casket.tch
+[terminal-1]$ ttserver casket.tch
+</pre>
+
+<p>Check consistency of stored records.</p>
+
+<pre>[terminal-2]$ tcrmgr mget localhost one two three
+</pre>
+
+<p>Terminate the server by Ctrl-C and remove the databases, for the successive tutorial.</p>
+
+<pre>[terminal-1]$ rm casket.tch backup.tch
+</pre>
+
+<h3 id="tutorial_ulog">Update Log</h3>
+
+<p>Let's run the server with update logging enabled.  The option `<code>-ulog</code>' specifies the directory to contain the update log files.</p>
+
+<pre>[terminal-1]$ mkdir ulog
+[terminal-1]$ ttserver -ulog ulog casket.tch
+</pre>
+
+<p>Store some records.</p>
+
+<pre>[terminal-2]$ tcrmgr put localhost one first
+[terminal-2]$ tcrmgr put localhost two second
+[terminal-2]$ tcrmgr put localhost three third
+</pre>
+
+<p>Terminate the server by Ctrl-C and remove the database.</p>
+
+<pre>[terminal-1]$ rm casket.tch
+</pre>
+
+<p>Escape the update log directoty and restart the server.</p>
+
+<pre>[terminal-1]$ mv ulog ulog-back
+[terminal-1]$ mkdir ulog
+[terminal-1]$ ttserver -ulog ulog casket.tch
+</pre>
+
+<p>Restore the database from the escaped update log, by the command `<code>tcrmgr restore</code>' on the client side.</p>
+
+<pre>[terminal-2]$ tcrmgr restore localhost ulog-back
+</pre>
+
+<p>Check consistency of stored records.</p>
+
+<pre>[terminal-2]$ tcrmgr mget localhost one two three
+</pre>
+
+<p>Terminate the server by Ctrl-C and remove the database, for the successive tutorial.</p>
+
+<pre>[terminal-1]$ rm -rf casket.tch ulog ulog-back
+</pre>
+
+<h3 id="tutorial_replication">Replication</h3>
+
+<p>Replication is a mechanism to synchronize two or more database servers for high availability and high integrity.  The replication source server is called "master" and each destination server is called "slave".  Replication requires the following preconditions.</p>
+
+<ul>
+<li>The master must record the update log.</li>
+<li>The master must specify the unique server ID.</li>
+<li>Each slave must record the update log because it may become the master when fail over.</li>
+<li>Each slave must specify the unique server ID because it may become the master when fail over.</li>
+<li>Each slave must specify the address and the port number of the master server.</li>
+<li>Each slave must specify the replication time stamp file.</li>
+</ul>
+
+<p>This section describes how to set up one master (at port 1978) and one slave (at port 1979) replication.  First, let's run the master server.</p>
+
+<pre>[terminal-1]$ mkdir ulog-1
+[terminal-1]$ ttserver -port 1978 -ulog ulog-1 -sid 1 casket-1.tch
+</pre>
+
+<p>Next, let's run the slave server in another terminal.</p>
+
+<pre>[terminal-2]$ mkdir ulog-2
+[terminal-2]$ ttserver -port 1979 -ulog ulog-2 -sid 2 \
+                -mhost localhost -mport 1978 -rts 2.rts casket-2.tch
+</pre>
+
+<p>Store some records into the master.</p>
+
+<pre>[terminal-3]$ tcrmgr put -port 1978 localhost one first
+[terminal-3]$ tcrmgr put -port 1978 localhost two second
+[terminal-3]$ tcrmgr put -port 1978 localhost three third
+</pre>
+
+<p>Check consistency of stored records in the master and the slave.</p>
+
+<pre>[terminal-2]$ tcrmgr mget -port 1978 localhost one two three
+[terminal-2]$ tcrmgr mget -port 1979 localhost one two three
+</pre>
+
+<p>Let's simulate the case that the master is crashed.  Terminate the master by Ctrl-C and remove the database file.</p>
+
+<pre>[terminal-1]$ rm casket-1.tch
+</pre>
+
+<p>Terminate the slave by Ctrl-C and restart it as the new master.</p>
+
+<pre>[terminal-2]$ ttserver -port 1979 -ulog ulog-2 -sid 2 casket-2.tch
+</pre>
+
+<p>Add the new slave (at port 1980).</p>
+
+<pre>[terminal-1]$ mkdir ulog-3
+[terminal-1]$ ttserver -port 1980 -ulog ulog-3 -sid 3 \
+                -mhost localhost -mport 1979 -rts 3.rts casket-3.tch
+</pre>
+
+<p>Check consistency of stored records in the new master and the new slave.</p>
+
+<pre>[terminal-2]$ tcrmgr mget -port 1979 localhost one two three
+[terminal-2]$ tcrmgr mget -port 1980 localhost one two three
+</pre>
+
+<p>Terminate the two servers by Ctrl-C and remove the database and related files.</p>
+
+<pre>[terminal-1]$ rm -rf casket-1.tch ulog-1 1.rts
+[terminal-2]$ rm -rf casket-2.tch ulog-2 2.rts
+[terminal-1]$ rm -rf casket-3.tch ulog-3 3.rts
+</pre>
+
+<p>Tokyo Tyrant supports "dual master" replication which realizes higher availability.  To do it, run two servers which replicate each other.  Note that updating both of the masters at the same time may cause inconsistency of their databases.  By default, the servers do not complain even if inconsistency is detected.  The option `<code>-rcc</code>' make them check the consistency and stop replication when inconsistency is detected.</p>
+
+<h3 id="tutorial_repondemand">Setting Replication on Demand</h3>
+
+<p>You can set replication of the running database service without any downtime.  First, prepare the following script for backup operation and save it as "ttbackup.sh" with executable permission (0755).</p>
+
+<pre>#! /bin/sh
+srcpath="$1"
+destpath="$1.$2"
+rm -f "$destpath"
+cp -f "$srcpath" "$destpath"
+</pre>
+
+<p>Next, let's run the master with update log enabled.</p>
+
+<pre>[terminal-1]$ mkdir ulog-1
+[terminal-1]$ ttserver -port 1978 -ulog ulog-1 -sid 1 casket-1.tch
+</pre>
+
+<p>Store a volume of records into the master.</p>
+
+<pre>[terminal-2]$ tcrtest write -port 1978 localhost 10000
+</pre>
+
+<p>Check consistency of stored records.</p>
+
+<pre>[terminal-2]$ tcrmgr list -port 1978 -pv localhost
+</pre>
+
+<p>Backup the database.</p>
+
+<pre>[terminal-2]$ tcrmgr copy -port 1978 localhost '@./ttbackup.sh'
+</pre>
+
+<p>Confirm that the backup file was saved as "casket-1.tch.<var>xxxxx</var>" ("<var>xxxxx</var>" stands for the time stamp of the backup file).  Then, run the slave with the backup file.</p>
+
+<pre>[terminal-2]$ ls
+[terminal-2]$ cp casket-1.tch.<var>xxxxx</var> casket-2.tch
+[terminal-2]$ echo <var>xxxxx</var> &gt; 2.rts
+[terminal-2]$ mkdir ulog-2
+[terminal-2]$ ttserver -port 1979 -ulog ulog-2 -sid 2 -rts 2.rts casket-2.tch
+</pre>
+
+<p>Note that the above operation did not specify the master server to the slave.  For tutorial, let's simulate that some records are stored into the master by users while you are setting replication.</p>
+
+<pre>[terminal-3]$ tcrmgr put -port 1978 localhost one first
+[terminal-3]$ tcrmgr put -port 1978 localhost two second
+[terminal-3]$ tcrmgr put -port 1978 localhost three third
+</pre>
+
+<p>Check the difference between the master and the slave.</p>
+
+<pre>[terminal-3]$ tcrmgr inform -port 1978 localhost
+[terminal-3]$ tcrmgr inform -port 1979 localhost
+</pre>
+
+<p>Specify the master to the slave so that replication will start and the difference will be resolved.</p>
+
+<pre>[terminal-3]$ tcrmgr setmst -port 1979 -mport 1978 localhost localhost
+</pre>
+
+<p>Confirm that the slave knows the master and the difference has been resolved.</p>
+
+<pre>[terminal-3]$ tcrmgr inform -port 1979 -st localhost
+</pre>
+
+<p>Terminate the two servers by Ctrl-C and remove the database and related files.</p>
+
+<pre>[terminal-1]$ rm -rf casket-1.tch casket-1.tch.* ulog-1 1.rts ttbackup.sh
+[terminal-2]$ rm -rf casket-2.tch ulog-2 2.rts
+</pre>
+
+<h3 id="tutorial_tuning">Tuning</h3>
+
+<p>If you use a hash database, set the tuning parameter "#bnum=<var>xxx</var>" to improve performance.  It specifies the bucket number and should be more than the number of record to be stored.</p>
+
+<p>If you use a B+ tree database, set the tuning parameters "#lcnum=<var>xxx</var>#bnum=<var>yyy</var>" to improve performance.  The former specifies the maximum number of leaf nodes to be cached.  It should be larger as long as the capacity of RAM on the system allows.  The latter specifies the bucket number and should be more than 1/128 of the number of records to be stored.</p>
+
+<p>If huge number of clients access the server, make sure the limit number of file descriptors per process is cleared.  By default on most systems, it is set as 1024.  If so, use `<code>ulimit</code>' to clear it.</p>
+
+<p>In order to deal with rushing queries at the peak time of your service, replication combining the on-memory hash/tree database and the file hash/tree database is useful.  The master server handles the on-memory database and it can come through rushing queries at the peak time.  Though the on-memory database can not assure the data persistence, the slave of replication compensates the shortage by storing records in the file database.</p>
+
+<h3 id="tutorial_luaext">Lua Extension</h3>
+
+<p>If you want more complex database operations than existing ones, use the Lua extension.  For example, prepare the following script and save it as "test.lua".  There is a function "fibonacci" which returns the Fibonacci number of a number of the key.</p>
+
+<pre>function fibonacci(key, value)
+   local num = tonumber(key)
+   local large = math.pow((1 + math.sqrt(5)) / 2, num)
+   local small = math.pow((1 - math.sqrt(5)) / 2, num)
+   return (large - small) / math.sqrt(5)
+end
+</pre>
+
+<p>Let's start the server by making it read the script file.</p>
+
+<pre>[terminal-1]$ ttserver -ext test.lua
+</pre>
+
+<p>Call the function from the client command.</p>
+
+<pre>[terminal-2]$ tcrmgr ext localhost fibonacci 1
+[terminal-2]$ tcrmgr ext localhost fibonacci 2
+[terminal-2]$ tcrmgr ext localhost fibonacci 3
+[terminal-2]$ tcrmgr ext localhost fibonacci 4
+[terminal-2]$ tcrmgr ext localhost fibonacci 5
+[terminal-2]$ tcrmgr ext localhost fibonacci 6
+</pre>
+
+<p>Fibonacci numbers can be generated by another algorithm, which is naive and stateful.  Add the following script to "test.lua".  There is a function "fibnext" which returns the next Fibonacci number from the database.  The state information are stored in the database.</p>
+
+<pre>function fibnext(key, value)
+   local cur = tonumber(_get("fibcur"))
+   if not cur then
+      _put("fibold", 0)
+      _put("fibcur", 1)
+      return 1
+   end
+   local old = tonumber(_get("fibold"))
+   _put("fibold", cur)
+   cur = old + cur
+   _put("fibcur", cur)
+   return cur
+end
+</pre>
+
+<p>Then, restart the server and test the new algorithm.</p>
+
+<pre>[terminal-2]$ tcrmgr ext localhost fibnext
+[terminal-2]$ tcrmgr ext localhost fibnext
+[terminal-2]$ tcrmgr ext localhost fibnext
+[terminal-2]$ tcrmgr ext localhost fibnext
+[terminal-2]$ tcrmgr ext localhost fibnext
+[terminal-2]$ tcrmgr ext localhost fibnext
+</pre>
+
+<p>As you see, the called function receives two string parameters of the key and the value.  The return value is sent back to the client.  You can use such built-in functions for database operations as "_put", "_out", "_get", and so on.  There is a sample file `<code>ext/senatus.lua</code>'.</p>
+
+<h3 id="tutorial_memcached">Using memcached Client</h3>
+
+<p>This section describes how to use a memcached client library of Perl (Cache::Memcached) with Tokyo Tyrant.  Run the server of Tokyo Tyrant as usual.  And, the following script is a typical example.</p>
+
+<pre>use Cache::Memcached;
+
+my $memd = Cache::Memcached-&gt;new();
+$memd-&gt;set_servers(['localhost:1978']);
+
+$memd-&gt;set('one', 'first');
+$memd-&gt;set('two', 'second');
+$memd-&gt;set('three', 'third');
+
+my $val = $memd-&gt;get('one');
+printf("one: %s\n", $val);
+
+$val = $memd-&gt;get_multi('one', 'two', 'three');
+printf("one: %s\n", $val-&gt;{one});
+printf("two: %s\n", $val-&gt;{two});
+printf("three: %s\n", $val-&gt;{three});
+
+$memd-&gt;delete('one');
+</pre>
+
+<h3 id="tutorial_http">Using HTTP Client</h3>
+
+<p>This section describes how to use an HTTP client library of Perl (LWP::UserAgent) with Tokyo Tyrant.  Run the server of Tokyo Tyrant as usual.  And, the following script is a typical example.</p>
+
+<pre>use LWP::UserAgent;
+
+my $ua = LWP::UserAgent-&gt;new(keep_alive =&gt; 1);
+my $baseurl = 'http://localhost:1978/';
+
+my $req;
+$req = HTTP::Request-&gt;new(PUT =&gt; $baseurl . 'one', [], 'first');
+$ua-&gt;request($req);
+$req = HTTP::Request-&gt;new(PUT =&gt; $baseurl . 'two', ["X-TT-PDMODE" =&gt; 1], 'second');
+$ua-&gt;request($req);
+$req = HTTP::Request-&gt;new(PUT =&gt; $baseurl . 'three', ["X-TT-PDMODE" =&gt; 2], 'third');
+$ua-&gt;request($req);
+
+$req = HTTP::Request-&gt;new(GET =&gt; $baseurl . 'one');
+my $res = $ua-&gt;request($req);
+if($res-&gt;is_success()){
+    printf("%s\n", $res-&gt;content());
+}
+
+$req = HTTP::Request-&gt;new(DELETE =&gt; $baseurl . 'one');
+$res = $ua-&gt;request($req);
+
+$req = HTTP::Request-&gt;new(POST =&gt; $baseurl . 'foo',
+  ["X-TT-XNAME" =&gt; "echo", "X-TT-XOPTS" =&gt; 1], 'bar');
+$res = $ua-&gt;request($req);
+if($res-&gt;is_success()){
+    printf("%s\n", $res-&gt;content());
+}
+</pre>
+
+<h3 id="tutorial_expcache">Persistent but Expirable Cache</h3>
+
+<p>If you want to cache data like session information for your Web application but want to avoid data loss because of the server crash, using Tokyo Tyrant can be the solution, that is to say, "persistent" but expirable cache.  It requires the following preconditions.</p>
+
+<ul>
+<li>The server must open a table database.</li>
+<li>Clients should store each record with an expiration date column.</li>
+<li>The database should have an index for the expiration date column.</li>
+<li>The database should enable auto defragmentation.</li>
+<li>The server must periodically call the user defined function provided through the Lua extension.</li>
+</ul>
+
+<p>First, prepare the following script for expiration and save it as "ttexpire.lua".  It will expire records where the value of the "x" column exceeds the current date.</p>
+
+<pre>function expire()
+   local args = {}
+   local cdate = string.format("%d", _time())
+   table.insert(args, "addcond\0x\0NUMLE\0" .. cdate)
+   table.insert(args, "out")
+   local res = _misc("search", args)
+   if not res then
+      _log("expiration was failed", 2)
+   end
+end
+</pre>
+
+<p>Start the server by opening a table database which has the index for the "x" column, and by scheduling it to call the expiration function per second.</p>
+
+<pre>[terminal-1]$ ttserver -ext ttexpire.lua -extpc expire 1.0 "casket.tct#idx=x:dec#dfunit=8"
+</pre>
+
+<p>Store test records from another terminal.</p>
+
+<pre>[terminal-2]$ now=`date +%s`
+for((i=1;i&lt;=60;i++)); do
+  tcrmgr put -sep '|' localhost "$i" "x|$((now+i))"
+done
+</pre>
+
+<p>You can confirm that the records are being removed by expiration.</p>
+
+<pre>[terminal-2]$ tcrmgr list -pv -sep '|' localhost
+</pre>
+
+<hr />
+
+<h2 id="license">License</h2>
+
+<p>Tokyo Tyrant is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License or any later version.</p>
+
+<p>Tokyo Tyrant is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.</p>
+
+<p>You should have received a copy of the GNU Lesser General Public License along with Tokyo Tyrant (See the file `<code>COPYING</code>'); if not, write to the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.</p>
+
+<p>Tokyo Tyrant was written by FAL Labs.  You can contact the author by e-mail to `<code>info@fallabs.com</code>'.</p>
+
+<hr />
+
+</body>
+
+</html>
+
+<!-- END OF FILE -->

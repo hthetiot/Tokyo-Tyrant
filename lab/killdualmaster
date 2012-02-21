@@ -1,0 +1,12 @@
+#! /bin/sh
+
+export PATH="$PATH:/usr/local/bin:.:.."
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib:.:.."
+
+[ -f 1978.pid ] && pid1978=`cat 1978.pid`
+[ -f 1979.pid ] && pid1979=`cat 1979.pid`
+
+[ -n "$pid1978" ] && kill $pid1978 && printf 'killed: %d\n' $pid1978
+[ -n "$pid1979" ] && kill $pid1979 && printf 'killed: %d\n' $pid1979
+
+exit 1
